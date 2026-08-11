@@ -1,0 +1,28 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# Visual Studio / Rider / VS Code local settings
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+*.DotSettings.user
+
+# VS Code workspace-local state
+.vscode/*.code-workspace
+
+# Logs and test results
+*.log
+TestResults/
+
+# NuGet packages (machine-local cache folders)
+packages/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
