@@ -1,10 +1,12 @@
 using System.Windows;
 using System.IO;
 using System.Net;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
@@ -32,6 +34,10 @@ public partial class MainWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "JobSearchAssistant",
         "window-state.json");
+    private readonly string _resumeAnalyzerStateFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "JobSearchAssistant",
+        "resume-analyzer-state.json");
 
     public MainWindow()
     {
@@ -42,6 +48,32 @@ public partial class MainWindow : Window
     }
 
     private sealed record WindowPlacement(double Left, double Top, double Width, double Height, WindowState WindowState);
+    private sealed class ResumeAnalyzerState
+    {
+        public string? ResumeFilePath { get; set; }
+
+        public string? JobDescriptionFilePath { get; set; }
+
+        public string? PromptTemplateFilePath { get; set; }
+
+        public string? AiUrl { get; set; }
+
+        public bool ResumeSectionExpanded { get; set; } = true;
+
+        public bool ResumeContentExpanded { get; set; } = true;
+
+        public bool JobDescriptionSectionExpanded { get; set; } = true;
+
+        public bool JobDescriptionContentExpanded { get; set; } = true;
+
+        public bool PromptTemplateSectionExpanded { get; set; } = true;
+
+        public bool PromptTemplateContentExpanded { get; set; } = true;
+
+        public bool GeneratedPromptSectionExpanded { get; set; } = true;
+
+        public bool GeneratedPromptContentExpanded { get; set; } = true;
+    }
 
     private void ShowClipboardButton_Click(object sender, RoutedEventArgs e)
     {
@@ -113,6 +145,125 @@ public partial class MainWindow : Window
         UpdateStatus($"Date context set to {_currentDateToken}.", false);
     }
 
+    private void MergeButton_Click(object sender, RoutedEventArgs e)
+    {
+        GeneratePromptAndCopy();
+    }
+
+    private void SelectResumeFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        SelectAndLoadFile("Select Resume File", ResumePathTextBox, ResumeContentTextBox);
+    }
+
+    private void CopyResumeFromClipboardButton_Click(object sender, RoutedEventArgs e) {
+        CopyClipboardToTextbox("Resume", ResumeContentTextBox);
+    }
+
+    private void SelectJobDescriptionFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        SelectAndLoadFile("Select Job Description File", JobDescriptionPathTextBox, JobDescriptionContentTextBox);
+    }
+
+    private void CopyJobDescriptionFromClipboardButton_Click(object sender, RoutedEventArgs e)
+    {
+        CopyClipboardToTextbox("Job Description", JobDescriptionContentTextBox);
+
+        //string? clipboardText = GetClipboardPlainText();
+        //if (string.IsNullOrWhiteSpace(clipboardText))
+        //{
+        //    UpdateResumeAnalyzerStatus("Clipboard is empty. Copy the job description text and try again.", true);
+        //    return;
+        //}
+
+        //JobDescriptionContentTextBox.Text = clipboardText;
+        //JobDescriptionContentTextBox.CaretIndex = 0;
+        //JobDescriptionContentTextBox.ScrollToHome();
+        //UpdateResumeAnalyzerStatus("Job description copied from clipboard.", false);
+    }
+
+    private void CopyClipboardToTextbox(string contentName, TextBox target)
+    {
+        string? clipboardText = GetClipboardPlainText();
+        if (string.IsNullOrWhiteSpace(clipboardText))
+        {
+            UpdateResumeAnalyzerStatus($"Clipboard is empty. Copy the {contentName} text and try again.", true);
+            return;
+        }
+
+        target.Text = clipboardText;
+        target.CaretIndex = 0;
+        target.ScrollToHome();
+        UpdateResumeAnalyzerStatus($"{contentName} copied from clipboard.", false);
+
+    }
+
+    private void SelectPromptTemplateFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        SelectAndLoadFile("Select AI Prompt Template File", PromptTemplatePathTextBox, PromptTemplateContentTextBox);
+    }
+
+    private void GeneratePromptButton_Click(object sender, RoutedEventArgs e)
+    {
+        GeneratePromptAndCopy();
+    }
+
+    private void PromptAiButton_Click(object sender, RoutedEventArgs e)
+    {
+        GeneratePromptAndCopy();
+        OpenAiButton_Click(sender, e);
+    }
+
+    private void CopyPromptButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(GeneratedPromptTextBox.Text))
+        {
+            UpdateResumeAnalyzerStatus("No generated prompt to copy.", true);
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(GeneratedPromptTextBox.Text);
+            UpdateResumeAnalyzerStatus("Generated prompt copied to clipboard.", false);
+        }
+        catch (Exception ex)
+        {
+            UpdateResumeAnalyzerStatus($"Failed to copy prompt. {ex.Message}", true);
+        }
+    }
+
+    private void OpenAiButton_Click(object sender, RoutedEventArgs e)
+    {
+        string urlText = AiUrlTextBox.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(urlText))
+        {
+            UpdateResumeAnalyzerStatus("Enter an AI URL first.", true);
+            return;
+        }
+
+        if (!TryCreateBrowserUri(urlText, out Uri uri))
+        {
+            UpdateResumeAnalyzerStatus("Invalid AI URL. Use http:// or https://.", true);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = uri.AbsoluteUri,
+                UseShellExecute = true
+            });
+
+            SaveResumeAnalyzerState();
+            UpdateResumeAnalyzerStatus("AI URL opened in your default browser.", false);
+        }
+        catch (Exception ex)
+        {
+            UpdateResumeAnalyzerStatus($"Failed to open AI URL. {ex.Message}", true);
+        }
+    }
+
     private void ApplyWordWrap(bool wrapEnabled)
     {
         ClipboardDumpTextBox.TextWrapping = wrapEnabled ? TextWrapping.Wrap : TextWrapping.NoWrap;
@@ -130,12 +281,221 @@ public partial class MainWindow : Window
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         TryRestoreWindowPlacement();
+        TryRestoreResumeAnalyzerState();
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         SaveWindowPlacement();
+        SaveResumeAnalyzerState();
         base.OnClosing(e);
+    }
+
+    private void SelectAndLoadFile(string title, TextBox pathTextBox, TextBox contentTextBox)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = title,
+            Filter = "Text and Markdown Files|*.txt;*.md;*.markdown|All Files|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+
+        if (!string.IsNullOrWhiteSpace(pathTextBox.Text))
+        {
+            dialog.FileName = pathTextBox.Text;
+        }
+
+        bool? result = dialog.ShowDialog(this);
+        if (result != true)
+        {
+            return;
+        }
+
+        pathTextBox.Text = dialog.FileName;
+        LoadFileContentIntoTextBox(pathTextBox, contentTextBox);
+        SaveResumeAnalyzerState();
+    }
+
+    private void LoadFileContentIntoTextBox(TextBox pathTextBox, TextBox contentTextBox)
+    {
+        string path = pathTextBox.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            contentTextBox.Clear();
+            return;
+        }
+
+        try
+        {
+            if (!File.Exists(path))
+            {
+                contentTextBox.Text = "File not found.";
+                UpdateResumeAnalyzerStatus($"File does not exist: {path}", true);
+                return;
+            }
+
+            contentTextBox.Text = File.ReadAllText(path);
+            contentTextBox.CaretIndex = 0;
+            contentTextBox.ScrollToHome();
+            UpdateResumeAnalyzerStatus($"Loaded file: {path}", false);
+        }
+        catch (Exception ex)
+        {
+            contentTextBox.Text = $"Failed to load file. {ex.GetType().Name}: {ex.Message}";
+            UpdateResumeAnalyzerStatus($"Failed to load file: {path}", true);
+        }
+    }
+
+    private void GeneratePromptAndCopy()
+    {
+        // LoadFileContentIntoTextBox(ResumePathTextBox, ResumeContentTextBox);
+        // LoadFileContentIntoTextBox(JobDescriptionPathTextBox, JobDescriptionContentTextBox);
+        // LoadFileContentIntoTextBox(PromptTemplatePathTextBox, PromptTemplateContentTextBox);
+
+        if (string.IsNullOrWhiteSpace(PromptTemplatePathTextBox.Text))
+        {
+            UpdateResumeAnalyzerStatus("Select an AI prompt template file first.", true);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ResumePathTextBox.Text))
+        {
+            UpdateResumeAnalyzerStatus("Select a resume file first.", true);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(JobDescriptionPathTextBox.Text))
+        {
+            UpdateResumeAnalyzerStatus("Select a job description file first.", true);
+            return;
+        }
+
+        string template = PromptTemplateContentTextBox.Text;
+        string resume = ResumeContentTextBox.Text;
+        string description = JobDescriptionContentTextBox.Text;
+
+        string generatedPrompt = template
+            .Replace("[YOUR RESUME HERE]", resume, StringComparison.Ordinal)
+            .Replace("[JOB DESCRIPTION HERE]", description, StringComparison.Ordinal);
+
+        GeneratedPromptTextBox.Text = generatedPrompt;
+        GeneratedPromptTextBox.CaretIndex = 0;
+        GeneratedPromptTextBox.ScrollToHome();
+
+        try
+        {
+            Clipboard.SetText(generatedPrompt);
+            UpdateResumeAnalyzerStatus("Prompt generated and copied to clipboard.", false);
+        }
+        catch (Exception ex)
+        {
+            UpdateResumeAnalyzerStatus($"Prompt generated, but copy failed. {ex.Message}", true);
+        }
+    }
+
+    private void UpdateResumeAnalyzerStatus(string message, bool isError)
+    {
+        ResumeAnalyzerStatusTextBlock.Text = $"Status: {message}";
+        ResumeAnalyzerStatusTextBlock.Foreground = isError
+            ? System.Windows.Media.Brushes.Firebrick
+            : System.Windows.Media.Brushes.DarkGreen;
+    }
+
+    private void TryRestoreResumeAnalyzerState()
+    {
+        try
+        {
+            if (!File.Exists(_resumeAnalyzerStateFilePath))
+            {
+                return;
+            }
+
+            string json = File.ReadAllText(_resumeAnalyzerStateFilePath);
+            ResumeAnalyzerState? state = JsonSerializer.Deserialize<ResumeAnalyzerState>(json);
+            if (state is null)
+            {
+                return;
+            }
+
+            ResumePathTextBox.Text = state.ResumeFilePath ?? string.Empty;
+            JobDescriptionPathTextBox.Text = state.JobDescriptionFilePath ?? string.Empty;
+            PromptTemplatePathTextBox.Text = state.PromptTemplateFilePath ?? string.Empty;
+            AiUrlTextBox.Text = state.AiUrl ?? string.Empty;
+            ResumeSectionExpander.IsExpanded = state.ResumeSectionExpanded;
+            ResumeContentExpander.IsExpanded = state.ResumeContentExpanded;
+            JobDescriptionSectionExpander.IsExpanded = state.JobDescriptionSectionExpanded;
+            JobDescriptionContentExpander.IsExpanded = state.JobDescriptionContentExpanded;
+            PromptTemplateSectionExpander.IsExpanded = state.PromptTemplateSectionExpanded;
+            PromptTemplateContentExpander.IsExpanded = state.PromptTemplateContentExpanded;
+            GeneratedPromptSectionExpander.IsExpanded = state.GeneratedPromptSectionExpanded;
+            GeneratedPromptContentExpander.IsExpanded = state.GeneratedPromptContentExpanded;
+
+            LoadFileContentIntoTextBox(ResumePathTextBox, ResumeContentTextBox);
+            LoadFileContentIntoTextBox(JobDescriptionPathTextBox, JobDescriptionContentTextBox);
+            LoadFileContentIntoTextBox(PromptTemplatePathTextBox, PromptTemplateContentTextBox);
+        }
+        catch
+        {
+            // Ignore resume analyzer state restore issues and use default startup behavior.
+        }
+    }
+
+    private void SaveResumeAnalyzerState()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_resumeAnalyzerStateFilePath)!);
+
+            var state = new ResumeAnalyzerState
+            {
+                ResumeFilePath = NormalizePersistedPath(ResumePathTextBox.Text),
+                JobDescriptionFilePath = NormalizePersistedPath(JobDescriptionPathTextBox.Text),
+                PromptTemplateFilePath = NormalizePersistedPath(PromptTemplatePathTextBox.Text),
+                AiUrl = NormalizePersistedPath(AiUrlTextBox.Text),
+                ResumeSectionExpanded = ResumeSectionExpander.IsExpanded,
+                ResumeContentExpanded = ResumeContentExpander.IsExpanded,
+                JobDescriptionSectionExpanded = JobDescriptionSectionExpander.IsExpanded,
+                JobDescriptionContentExpanded = JobDescriptionContentExpander.IsExpanded,
+                PromptTemplateSectionExpanded = PromptTemplateSectionExpander.IsExpanded,
+                PromptTemplateContentExpanded = PromptTemplateContentExpander.IsExpanded,
+                GeneratedPromptSectionExpanded = GeneratedPromptSectionExpander.IsExpanded,
+                GeneratedPromptContentExpanded = GeneratedPromptContentExpander.IsExpanded
+            };
+
+            string json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(_resumeAnalyzerStateFilePath, json);
+        }
+        catch
+        {
+            // Ignore resume analyzer state save issues.
+        }
+    }
+
+    private static string? NormalizePersistedPath(string? path)
+    {
+        string trimmed = path?.Trim() ?? string.Empty;
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    private static bool TryCreateBrowserUri(string input, out Uri uri)
+    {
+        uri = null!;
+
+        if (!Uri.TryCreate(input, UriKind.Absolute, out Uri? absoluteUri))
+        {
+            return false;
+        }
+
+        bool isHttp = absoluteUri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase);
+        bool isHttps = absoluteUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+        if (!isHttp && !isHttps)
+        {
+            return false;
+        }
+
+        uri = absoluteUri;
+        return true;
     }
 
     protected override void OnClosed(EventArgs e)
@@ -758,7 +1118,7 @@ public partial class MainWindow : Window
                 previousRowRangeObject = previousListRow.Range;
                 dynamic previousRowRange = previousRowRangeObject;
 
-                CopyFormulaFromPreviousRow(tableColumns, previousRowRange, newRowRange, "Application Number");
+                IncrementFromPreviousRow(tableColumns, previousRowRange, newRowRange, "Application Number");
                 CopyFormulaFromPreviousRow(tableColumns, previousRowRange, newRowRange, "Date");
                 CopyFormulaFromPreviousRow(tableColumns, previousRowRange, newRowRange, "Day of Week");
                 CopyFormulaFromPreviousRow(tableColumns, previousRowRange, newRowRange, "Company");
@@ -1253,6 +1613,29 @@ public partial class MainWindow : Window
         {
             ReleaseComObject(hyperlinksObject);
             ReleaseComObject(cellObject);
+        }
+    }
+
+    private static void IncrementFromPreviousRow(dynamic tableColumns, dynamic previousRowRange, dynamic newRowRange, string columnName)
+    {
+        int columnIndex = GetColumnIndex(tableColumns, columnName);
+        object? previousCellObject = null;
+        object? newCellObject = null;
+        try
+        {
+            previousCellObject = previousRowRange.Cells[1, columnIndex];
+            newCellObject = newRowRange.Cells[1, columnIndex];
+            dynamic previousCell = previousCellObject;
+            dynamic newCell = newCellObject;
+            if (previousCell.Value2 is double previousValue)
+            {
+                newCell.Value2 = previousValue + 1;
+            }
+        }
+        finally
+        {
+            ReleaseComObject(newCellObject);
+            ReleaseComObject(previousCellObject);
         }
     }
 

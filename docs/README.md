@@ -7,7 +7,7 @@ Note: There was a failed attempt to get data directly from OneNote, but the deve
 
 # Develop in small steps
 
-# Read the clipboard
+## Job Application Tracker
 
 AI prompt 1:
 Let's start very simply. Create a desktop app that has one button. When the button is pressed, it displays the content of the clipboard. I expect the clipboard contents to be complex, so I want to see all of it so that I can choose what parts to use and what parts to ignore.
@@ -109,3 +109,44 @@ There is a bug in duplicate detection. There are some job entries that are being
 
 AI prompt 23:
 Have the application window remember its location so that it comes back to the same place it closed from.
+
+## Resume Analyzer
+
+AI prompt 23:
+The current functionality is focused on tracking job applications. I want to add distinct functionality. Let's start by adding a tabbed interface. Put the current functionality into tab "Applications". Add tab "Resume Analyzer".
+
+AI prompt 24:
+Now to work with the Resume Analyzer feature.
+
+1. Add a toolbar that includes
+   1. a button labeled "Merge"
+1. Add a display for the resume content:
+   1. make it a collapsible panel, labeled "Resume", that includes
+   1. a file path that will be remembered across app invocations, like the window placement
+   1. a button to select a different file
+   1. a collapsible panel, labeled "Resume", that includes the resume file's content
+1. Add a display for the job description:
+   1. make it a collapsible panel, labeled "Job Description", that includes
+   1. a file path that will be remembered across app invocations, like the window placement
+   1. a button to select a different file
+   1. a collapsible panel, labled "Description", the includes the job description file's content
+1. Add a display for the AI prompt template
+   1. make it a collapsible panel, labeled "AI Prompt Template", that includes
+   1. a file path that will be remembered across app invocations, like the window placement
+   1. a button to select a different file
+   1. a collapsible panel, labled "Template", the includes the job description file's content
+1. Add a display for the generated AI prompt
+   1. make it a collapsible panel, labeled "AI Prompt", that includes
+   1. a button labeled "Generate Prompt" - when the button is pressed
+      1. the AI prompt template will be merged with the resume and job description
+         1.The AI prompt template has replacement variables
+         1. `[YOUR RESUME HERE]` - to be replaced by the content of the resume text
+         1. `[JOB DESCRIPTION HERE]` - to be replaced by the content of the job description text
+      1. the generated text will be copied to the "Template" textbox
+      1. the generated text will be copied to the clipboard
+   1. a button labeled "Copy Prompt" - when pressed, the text from the "Template" textbox will be copied to the clipboard
+   1. a collapsible panel, labled "Template", the includes a textbox that holds the generated AI prompt
+
+AI prompt 25:
+Next to button "Copy Prompt", add button "Open AI".
+Next to the "Open AI" button add a textbox that will hold a URL that will be remembered.
