@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:components="clr-namespace:JobSearchAssistant.Maui.Components"
+             x:Class="JobSearchAssistant.Maui.ResumeAnalyzerPage"
+             Title="Resume Analyzer">
+    <Grid RowDefinitions="Auto,*" RowSpacing="0">
+        <BoxView HeightRequest="1" BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Padding="20" Spacing="15">
+                <Label x:Name="StatusLabel" Text="Ready" FontSize="14" TextColor="#666666" Margin="0,0,0,10" />
+
+                <Border x:Name="AiPrompt_Container_Expander" Style="{StaticResource ExpanderContainer}" StyleClass="ExpanderContainer" components:Expander.IsExpanded="False">
+                    <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                        <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader">
+                            <HorizontalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="OnExpanderToggleTapped" /></HorizontalStackLayout.GestureRecognizers>
+                            <Label x:Name="AiPromptToggle" Style="{StaticResource ExpanderToggleSymbol}" StyleClass="ExpanderToggleSymbol" Text="▼" FontSize="14" VerticalOptions="Center" Margin="0,0,10,0" />
+                            <Label Text="AI Prompt" FontAttributes="Bold" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                        <VerticalStackLayout x:Name="AiPromptContent" Style="{StaticResource ExpanderBody}" StyleClass="ExpanderBody">
+                            <Grid ColumnSpacing="8" RowSpacing="0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Button x:Name="PromptAiButton" Text="Prompt AI" Clicked="OnPromptAiClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="0" />
+                                <Button x:Name="GeneratePromptButton" Text="Generate Prompt" Clicked="OnGeneratePromptClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="1" />
+                                <Button x:Name="CopyPromptButton" Text="Copy Prompt" Clicked="OnCopyPromptClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="2" />
+                                <Button x:Name="OpenAiButton" Text="Open AI" Clicked="OnOpenAiClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="3" />
+                                <Entry x:Name="AiUrlEntry" Placeholder="AI URL (e.g., https://chatgpt.com)" FontSize="12" HeightRequest="32" MinimumHeightRequest="32" Unfocused="OnAiUrlEntryUnfocused" Grid.Column="4" />
+                            </Grid>
+                            <Border x:Name="AiPrompt_Content_Expander" Style="{StaticResource ExpanderContainer}" StyleClass="ExpanderContainer" components:Expander.IsExpanded="False">
+                                <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                                    <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader">
+                                        <HorizontalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="OnExpanderToggleTapped" /></HorizontalStackLayout.GestureRecognizers>
+                                        <Label x:Name="AiPromptContentToggle" Style="{StaticResource ExpanderToggleSymbol}" StyleClass="ExpanderToggleSymbol" Text="▼" FontSize="12" VerticalOptions="Center" Margin="0,0,8,0" />
+                                        <Label Text="Content" FontAttributes="Bold" FontSize="13" VerticalOptions="Center" />
+                                    </HorizontalStackLayout>
+                                    <Editor x:Name="AiPromptEditor" Style="{StaticResource ExpanderBody}" StyleClass="ExpanderBody" Placeholder="Generated prompt will appear here..." MinimumHeightRequest="60" AutoSize="TextChanges" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border x:Name="JobDescription_Container_Expander" Style="{StaticResource ExpanderContainer}" StyleClass="ExpanderContainer" components:Expander.IsExpanded="False">
+                    <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                        <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader">
+                            <HorizontalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="OnExpanderToggleTapped" /></HorizontalStackLayout.GestureRecognizers>
+                            <Label x:Name="JobDescriptionToggle" Style="{StaticResource ExpanderToggleSymbol}" StyleClass="ExpanderToggleSymbol" Text="▼" FontSize="14" VerticalOptions="Center" Margin="0,0,10,0" />
+                            <Label Text="Job Description" FontAttributes="Bold" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                        <VerticalStackLayout Style="{StaticResource ExpanderBody}" StyleClass="ExpanderBody">
+                            <Grid ColumnSpacing="8" RowSpacing="0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <Button x:Name="FromClipboardButton" Text="From Clipboard" Clicked="OnFromClipboardClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="0" />
+                                <Button x:Name="FromFileButton" Text="From File" Clicked="OnFromFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="1" />
+                                <Entry x:Name="JobDescriptionFilePath" Placeholder="File path..." IsReadOnly="True" FontSize="12" HeightRequest="32" MinimumHeightRequest="32" Grid.Column="2" />
+                                <Button x:Name="SelectFileButton" Text="Select File" Clicked="OnSelectJobDescriptionFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="3" />
+                                <Button x:Name="OpenFileButton" Text="Open File" Clicked="OnOpenJobDescriptionFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="4" />
+                            </Grid>
+                            <Border x:Name="JobDescription_Content_Expander" Style="{StaticResource ExpanderContainer}" StyleClass="ExpanderContainer" components:Expander.IsExpanded="False">
+                                <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                                    <HorizontalStackLayout><HorizontalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="OnExpanderToggleTapped" /></HorizontalStackLayout.GestureRecognizers><Label x:Name="DescriptionToggle" Style="{StaticResource ExpanderToggleSymbol}" StyleClass="ExpanderToggleSymbol" Text="▼" FontSize="12" VerticalOptions="Center" Margin="0,0,8,0" /><Label Text="Content" FontAttributes="Bold" FontSize="13" VerticalOptions="Center" /></HorizontalStackLayout>
+                                    <Editor x:Name="JobDescriptionEditor" Placeholder="File contents will appear here..." MinimumHeightRequest="60" AutoSize="TextChanges" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border x:Name="Resume_Container_Expander" Style="{StaticResource ExpanderContainer}" StyleClass="ExpanderContainer" components:Expander.IsExpanded="False">
+                    <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                        <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader"><HorizontalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="OnExpanderToggleTapped" /></HorizontalStackLayout.GestureRecognizers><Label x:Name="ResumeToggle" Style="{StaticResource ExpanderToggleSymbol}" StyleClass="ExpanderToggleSymbol" Text="▼" FontSize="14" VerticalOptions="Center" Margin="0,0,10,0" /><Label Text="Resume" FontAttributes="Bold" VerticalOptions="Center" /></HorizontalStackLayout>
+                        <VerticalStackLayout x:Name="ResumeContent" Style="{StaticResource ExpanderBody}" StyleClass="ExpanderBody">
+                            <Grid ColumnSpacing="8" RowSpacing="0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <Button x:Name="ResumeFromClipboardButton" Text="From Clipboard" Clicked="OnResumeFromClipboardClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="0" />
+                                <Button x:Name="ResumeFromFileButton" Text="From File" Clicked="OnResumeFromFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="1" />
+                                <Entry x:Name="ResumeFilePath" Placeholder="File path..." IsReadOnly="True" FontSize="12" HeightRequest="32" MinimumHeightRequest="32" Grid.Column="2" />
+                                <Button x:Name="ResumeSelectFileButton" Text="Select File" Clicked="OnResumeSelectFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="3" />
+                                <Button x:Name="ResumeOpenFileButton" Text="Open File" Clicked="OnResumeOpenFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="4" />
+                            </Grid>
+                            <Border x:Name="Resume_Content_Expander" Style="{StaticResource ExpanderContainer}" StyleClass="ExpanderContainer" components:Expander.IsExpanded="False"><VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent"><HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader"><HorizontalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="OnExpanderToggleTapped" /></HorizontalStackLayout.GestureRecognizers><Label x:Name="ResumeContentToggle" Style="{StaticResource ExpanderToggleSymbol}" StyleClass="ExpanderToggleSymbol" Text="▼" FontSize="12" VerticalOptions="Center" Margin="0,0,8,0" /><Label Text="Content" FontAttributes="Bold" FontSize="13" VerticalOptions="Center" /></HorizontalStackLayout><Editor x:Name="ResumeEditor" Placeholder="File contents will appear here..." MinimumHeightRequest="60" AutoSize="TextChanges" /></VerticalStackLayout></Border>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border x:Name="AiPromptTemplate_Container_Expander" Style="{StaticResource ExpanderContainer}" StyleClass="ExpanderContainer" components:Expander.IsExpanded="False">
+                    <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                        <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader"><HorizontalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="OnExpanderToggleTapped" /></HorizontalStackLayout.GestureRecognizers><Label x:Name="TemplateToggle" Style="{StaticResource ExpanderToggleSymbol}" StyleClass="ExpanderToggleSymbol" Text="▼" FontSize="14" VerticalOptions="Center" Margin="0,0,10,0" /><Label Text="AI Prompt Template" FontAttributes="Bold" VerticalOptions="Center" /></HorizontalStackLayout>
+                        <VerticalStackLayout x:Name="TemplateContent" Style="{StaticResource ExpanderBody}" StyleClass="ExpanderBody">
+                            <Grid ColumnSpacing="8" RowSpacing="0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <Button x:Name="TemplateFromClipboardButton" Text="From Clipboard" Clicked="OnTemplateFromClipboardClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="0" />
+                                <Button x:Name="TemplateFromFileButton" Text="From File" Clicked="OnTemplateFromFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="1" />
+                                <Entry x:Name="TemplateFilePath" Placeholder="File path..." IsReadOnly="True" FontSize="12" HeightRequest="32" MinimumHeightRequest="32" Grid.Column="2" />
+                                <Button x:Name="TemplateSelectFileButton" Text="Select File" Clicked="OnTemplateSelectFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="3" />
+                                <Button x:Name="TemplateOpenFileButton" Text="Open File" Clicked="OnTemplateOpenFileClicked" Padding="8,0" BorderWidth="0" CornerRadius="4" FontSize="12" HeightRequest="24" MinimumHeightRequest="24" Grid.Column="4" />
+                            </Grid>
+                            <Border x:Name="AiPromptTemplate_Content_Expander" Style="{StaticResource ExpanderContainer}" StyleClass="ExpanderContainer" components:Expander.IsExpanded="False"><VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent"><HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader"><HorizontalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="OnExpanderToggleTapped" /></HorizontalStackLayout.GestureRecognizers><Label x:Name="TemplateContentToggle" Style="{StaticResource ExpanderToggleSymbol}" StyleClass="ExpanderToggleSymbol" Text="▼" FontSize="12" VerticalOptions="Center" Margin="0,0,8,0" /><Label Text="Content" FontAttributes="Bold" FontSize="13" VerticalOptions="Center" /></HorizontalStackLayout><Editor x:Name="TemplateEditor" Placeholder="File contents will appear here..." MinimumHeightRequest="60" AutoSize="TextChanges" /></VerticalStackLayout></Border>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentPage>

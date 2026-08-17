@@ -51,6 +51,57 @@
         "build JobSearchAssistant.Ui"
       ],
       "problemMatcher": []
+    },
+    {
+      "label": "clean JobSearchAssistant.Maui",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "clean",
+        "${workspaceFolder}/src/JobSearchAssistant.Maui/JobSearchAssistant.Maui.csproj",
+        "/property:GenerateFullPaths=true",
+        "/p:Configuration=Debug"
+      ],
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false,
+        "close": true
+      }
+    },
+    {
+      "label": "build JobSearchAssistant.Maui",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/JobSearchAssistant.Maui/JobSearchAssistant.Maui.csproj",
+        "/property:GenerateFullPaths=true",
+        "/p:Configuration=Debug"
+      ],
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false,
+        "close": true
+      }
+    },
+    {
+      "label": "clean+build JobSearchAssistant.Maui",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "clean JobSearchAssistant.Maui",
+        "build JobSearchAssistant.Maui"
+      ],
+      "problemMatcher": []
     }
   ]
 }

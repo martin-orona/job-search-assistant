@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/JobSearchAssistant.Core/JobSearchAssistant.Core.csproj" />
+    <Project Path="src/JobSearchAssistant.Maui/JobSearchAssistant.Maui.csproj" />
     <Project Path="src/JobSearchAssistant.Ui/JobSearchAssistant.Ui.csproj" />
   </Folder>
 </Solution>

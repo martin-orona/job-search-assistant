@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="JobSearchAssistant.Maui.ApplicationsPage"
+             Title="Applications">
+    <ContentPage.Resources>
+        <Style x:Key="ListeningActiveButtonStyle" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light=#2E7D32, Dark=#81C784}" />
+            <Setter Property="TextColor" Value="{AppThemeBinding Light=White, Dark=#1B1B1B}" />
+            <Setter Property="FontAttributes" Value="Bold" />
+        </Style>
+    </ContentPage.Resources>
+    <Grid RowDefinitions="Auto,*" RowSpacing="0">
+        <BoxView HeightRequest="1"
+                 BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+        <ScrollView Grid.Row="1">
+            <Grid Padding="20" RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                    <Label x:Name="OneNoteStatusLabel"
+                           Text="Status: Ready"
+                           TextColor="Gray"
+                           FontSize="12"
+                           VerticalOptions="StartAndExpand" />
+                </Grid>
+
+                <FlexLayout Grid.Row="1" Wrap="Wrap" Direction="Row" AlignItems="Center" AlignContent="Start">
+                    <Button x:Name="ListeningToggleButton"
+                            Text="Start Listening"
+                            Clicked="ListeningToggleButton_Clicked"
+                            Margin="0,0,8,8"
+                            Padding="8,0"
+                            BorderWidth="0"
+                            CornerRadius="4"
+                            FontSize="12"
+                            HeightRequest="24"
+                            MinimumHeightRequest="24" />
+                    <Button Text="Clear Display"
+                            Clicked="ClearDisplayButton_Clicked"
+                            Margin="0,0,8,8"
+                            Padding="8,0"
+                            BorderWidth="0"
+                            CornerRadius="4"
+                            FontSize="12"
+                            HeightRequest="24"
+                            MinimumHeightRequest="24" />
+                    <HorizontalStackLayout Margin="0,0,16,8" VerticalOptions="Center" Spacing="0">
+                        <CheckBox x:Name="WordWrapCheckBox"
+                                  IsChecked="True"
+                                  CheckedChanged="WordWrapCheckBox_CheckedChanged"
+                                  VerticalOptions="Center"
+                                  WidthRequest="44"
+                                  MinimumWidthRequest="44"
+                                  HorizontalOptions="Start"
+                                  Margin="0" />
+                        <Label Text="Word Wrap" VerticalOptions="Center" Margin="-15,0,0,0" />
+                    </HorizontalStackLayout>
+                    <Label Text="Date Context" Margin="0,0,6,8" VerticalOptions="Center" />
+                    <Entry x:Name="ManualDateEntry"
+                           Placeholder="yyyymmdd or yyyymmdd DayName"
+                           WidthRequest="190"
+                           Margin="0,0,8,8"
+                           FontSize="12"
+                           VerticalOptions="Fill"
+                           HeightRequest="32"
+                           MinimumHeightRequest="32" />
+                    <Button Text="Set Date"
+                            Clicked="SetDateContextButton_Clicked"
+                            Margin="0,0,16,8"
+                            Padding="8,0"
+                            BorderWidth="0"
+                            CornerRadius="4"
+                            FontSize="12"
+                            HeightRequest="24"
+                            MinimumHeightRequest="24" />
+                    <Button Text="Read Clipboard"
+                            Clicked="ReadClipboardButton_Clicked"
+                            Margin="0,0,8,8"
+                            Padding="8,0"
+                            BorderWidth="0"
+                            CornerRadius="4"
+                            FontSize="12"
+                            HeightRequest="24"
+                            MinimumHeightRequest="24" />
+                    <Button Text="Write to Excel"
+                            Clicked="WriteToExcelButton_Clicked"
+                            Margin="0,0,8,8"
+                            Padding="8,0"
+                            BorderWidth="0"
+                            CornerRadius="4"
+                            FontSize="12"
+                            HeightRequest="24"
+                            MinimumHeightRequest="24" />
+                </FlexLayout>
+
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                    <Label Text="OneNote Link" FontAttributes="Bold" />
+                </Grid>
+
+                <Editor x:Name="ClipboardLinkEditor"
+                        Grid.Row="3"
+                        IsReadOnly="True"
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="110"
+                        FontSize="13"
+                        FontFamily="monospace" />
+
+                <Label Grid.Row="4" Text="Clipboard Contents" FontAttributes="Bold" Margin="0,0,0,4" />
+
+                <Editor x:Name="ClipboardDumpEditor"
+                        Grid.Row="5"
+                        IsReadOnly="True"
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="150"
+                        FontSize="13"
+                        FontFamily="monospace" />
+
+                <Label Grid.Row="6"
+                       x:Name="ApplicationsStatusLabel"
+                       Text=""
+                       TextColor="Gray"
+                       FontSize="12" />
+            </Grid>
+        </ScrollView>
+    </Grid>
+</ContentPage>

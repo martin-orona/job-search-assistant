@@ -5,12 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "src\\JobSearchAssistant.Ui\\JobSearchAssistant.Ui.csproj Debug",
+            "name": "UI Debug",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "clean+build JobSearchAssistant.Ui",
             "program": "${workspaceFolder}/src/JobSearchAssistant.Ui/bin/Debug/net10.0-windows/JobSearchAssistant.Ui.exe",
             "cwd": "${workspaceFolder}/src/JobSearchAssistant.Ui",
+            "stopAtEntry": false
+        },
+        {
+            "name": "Maui UI Debug",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "clean+build JobSearchAssistant.Maui",
+            "program": "${workspaceFolder}/src/JobSearchAssistant.Maui/bin/Debug/net10.0-windows10.0.19041.0/win-x64/JobSearchAssistant.Maui.exe",
+            "cwd": "${workspaceFolder}/src/JobSearchAssistant.Maui",
             "stopAtEntry": false
         }
     ]

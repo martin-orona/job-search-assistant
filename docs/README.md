@@ -5,6 +5,20 @@ It starts with allowing a user to copy the link to a OneNote paragraph and uses 
 
 Note: There was a failed attempt to get data directly from OneNote, but the development computer wasn't configured with the correct COM registrations for local notebook access and the online notebook API errored out with a 500 status code when reading the desired notebook page. See [README.OneNote-reader.md](README.OneNote-reader.md)
 
+## Applications clipboard workflow
+
+Writing to Excel requires a date context. Copy a date in `yyyymmdd` format, optionally followed by the day name, or enter it manually and set it in the Applications UI before copying a paragraph.
+
+Each paragraph is identified by its OneNote paragraph link/object identifier, not by its displayed text. Copying the same paragraph again does not add a duplicate row; if its copied text differs, the existing row text is updated through the first newline.
+
+When OneNote provides a truncated link text followed by a separate full-text clipboard copy, the full text is matched as a longer prefix of the current-date row and replaces the existing row text through the first newline. Different OneNote paragraph identifiers remain distinct even when their displayed text is identical.
+
+The listening workflow is:
+
+1. Copy the date to set the date context.
+2. Copy a paragraph link to add the linked paragraph to Excel.
+3. Copy the full paragraph text to complete the existing Excel entry.
+
 # Develop in small steps
 
 ## Job Application Tracker
