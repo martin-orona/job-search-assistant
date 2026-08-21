@@ -1,8 +1,6 @@
-using Microsoft.Extensions.DependencyInjection;
 using JobSearchAssistant.Maui.Services;
 
 #if WINDOWS
-using Microsoft.Maui.Platform;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using WinRT.Interop;
@@ -42,12 +40,15 @@ public partial class App : Application
             _window.Y = state.Window.Y;
         }
 
-    #if WINDOWS
-        _window.Created += (_, _) => SetWindowsIcon();
-    #endif
-
-        // Set selected tab
-        mainPage.CurrentPage = mainPage.Children[state.Navigation.SelectedTabIndex];
+#if WINDOWS
+        _window.Created += (_, _) =>
+        {
+            SetWindowsIcon();
+            mainPage.RestoreSelectedTab(state.Navigation.SelectedTabIndex);
+        };
+#else
+        _window.Created += (_, _) => mainPage.RestoreSelectedTab(state.Navigation.SelectedTabIndex);
+#endif
 
         // Save state when window is destroyed
         _window.Destroying += (s, e) => SaveState();
@@ -73,7 +74,7 @@ public partial class App : Application
             return;
         }
 
-        var mainPage = _window.Page as TabbedPage;
+        var mainPage = _window.Page as MainPage;
         if (mainPage == null)
         {
             return;
@@ -89,8 +90,10 @@ public partial class App : Application
         state.Window.Height = _window.Height;
 
         // Update the tab selection
-        state.Navigation.SelectedTabIndex = mainPage.Children.IndexOf(mainPage.CurrentPage);
+        state.Navigation.SelectedTabIndex = mainPage.SelectedTabIndex;
 
         _stateService.SaveState(state);
+
+        var restate = _stateService.LoadState();
     }
 }

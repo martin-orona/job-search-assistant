@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="JobSearchAssistant.Maui.JobListingsPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:components="clr-namespace:JobSearchAssistant.Maui.Components"
+    Title="Job Listings">
+    <Grid
+        Padding="12"
+        RowDefinitions="Auto,*"
+        RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+            <Entry
+                x:Name="UrlEntry"
+                Completed="OnUrlCompleted"
+                Keyboard="Url"
+                Placeholder="Job listing URL"
+                ReturnType="Go" />
+            <Button
+                x:Name="GoButton"
+                Grid.Column="1"
+                Clicked="OnGoClicked"
+                Text="Go" />
+            <Button
+                x:Name="ExtractButton"
+                Grid.Column="2"
+                Clicked="OnExtractClicked"
+                IsEnabled="False"
+                Text="Extract" />
+            <Button
+                x:Name="ExtractWorkflowButton"
+                Grid.Column="3"
+                Clicked="OnExtractWorkflowClicked"
+                Text="Assess" />
+        </Grid>
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Spacing="8">
+                <Border
+                    Stroke="DodgerBlue"
+                    StrokeShape="{RoundRectangle CornerRadius=6}"
+                    StrokeThickness="1">
+                    <Label
+                        x:Name="StatusLabel"
+                        Text="Open an Indeed job listing, then select Extract."
+                        TextColor="Gray" />
+                </Border>
+
+                <Border
+                    x:Name="ListingPageExpander"
+                    components:Expander.IsExpanded="True"
+                    Style="{StaticResource ExpanderContainer}"
+                    StyleClass="ExpanderContainer">
+                    <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                        <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader">
+                            <HorizontalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnExpanderToggleTapped" />
+                            </HorizontalStackLayout.GestureRecognizers>
+                            <Label
+                                Margin="0,0,10,0"
+                                FontSize="14"
+                                Style="{StaticResource ExpanderToggleSymbol}"
+                                StyleClass="ExpanderToggleSymbol"
+                                Text="▼"
+                                VerticalOptions="Center" />
+                            <Label
+                                FontAttributes="Bold"
+                                Text="Listing Page"
+                                VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                        <Grid
+                            HeightRequest="600"
+                            Style="{StaticResource ExpanderBody}"
+                            StyleClass="ExpanderBody">
+                            <WebView x:Name="JobListingWebView" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border
+                    x:Name="ExtractedJobListingExpander"
+                    components:Expander.IsExpanded="True"
+                    Style="{StaticResource ExpanderContainer}"
+                    StyleClass="ExpanderContainer">
+                    <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                        <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader">
+                            <HorizontalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnExpanderToggleTapped" />
+                            </HorizontalStackLayout.GestureRecognizers>
+                            <Label
+                                Margin="0,0,10,0"
+                                FontSize="14"
+                                Style="{StaticResource ExpanderToggleSymbol}"
+                                StyleClass="ExpanderToggleSymbol"
+                                Text="▼"
+                                VerticalOptions="Center" />
+                            <Label
+                                FontAttributes="Bold"
+                                Text="Extracted Job Listing"
+                                VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                        <VerticalStackLayout
+                            Spacing="8"
+                            Style="{StaticResource ExpanderBody}"
+                            StyleClass="ExpanderBody">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <HorizontalStackLayout Spacing="8">
+                                    <Button Clicked="OnCopyMarkdownClicked" Text="Markdown to Clipboard" />
+                                    <Button Clicked="OnCopyExtractedContentClicked" Text="Formatted to Clipboard" />
+                                </HorizontalStackLayout>
+                                <Entry
+                                    x:Name="ExtractedFilePath"
+                                    Grid.Column="1"
+                                    FontSize="12"
+                                    IsReadOnly="True"
+                                    Placeholder="Extracted file path" />
+                                <Button
+                                    Grid.Column="2"
+                                    Clicked="OnOpenExtractedFileClicked"
+                                    Text="Open" />
+                            </Grid>
+                            <Border
+                                x:Name="ExtractedContentExpander"
+                                components:Expander.IsExpanded="True"
+                                Style="{StaticResource ExpanderContainer}"
+                                StyleClass="ExpanderContainer">
+                                <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                                    <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader">
+                                        <HorizontalStackLayout.GestureRecognizers>
+                                            <TapGestureRecognizer Tapped="OnExpanderToggleTapped" />
+                                        </HorizontalStackLayout.GestureRecognizers>
+                                        <Label
+                                            Margin="0,0,8,0"
+                                            FontSize="12"
+                                            Style="{StaticResource ExpanderToggleSymbol}"
+                                            StyleClass="ExpanderToggleSymbol"
+                                            Text="▼"
+                                            VerticalOptions="Center" />
+                                        <Label
+                                            FontAttributes="Bold"
+                                            FontSize="13"
+                                            Text="Markdown Content"
+                                            VerticalOptions="Center" />
+                                    </HorizontalStackLayout>
+                                    <VerticalStackLayout
+                                        Spacing="8"
+                                        Style="{StaticResource ExpanderBody}"
+                                        StyleClass="ExpanderBody">
+                                        <Editor
+                                            x:Name="ExtractedContentEditor"
+                                            AutoSize="TextChanges"
+                                            IsReadOnly="True"
+                                            MinimumHeightRequest="160"
+                                            Placeholder="Extracted listing content will appear here..."
+                                            Style="{StaticResource ExpanderBody}"
+                                            StyleClass="ExpanderBody" />
+                                    </VerticalStackLayout>
+                                </VerticalStackLayout>
+                            </Border>
+                            <Border
+                                x:Name="FormattedContentExpander"
+                                components:Expander.IsExpanded="True"
+                                Style="{StaticResource ExpanderContainer}"
+                                StyleClass="ExpanderContainer">
+                                <VerticalStackLayout Style="{StaticResource ExpanderContent}" StyleClass="ExpanderContent">
+                                    <HorizontalStackLayout Style="{StaticResource ExpanderHeader}" StyleClass="ExpanderHeader">
+                                        <HorizontalStackLayout.GestureRecognizers>
+                                            <TapGestureRecognizer Tapped="OnExpanderToggleTapped" />
+                                        </HorizontalStackLayout.GestureRecognizers>
+                                        <Label
+                                            Margin="0,0,8,0"
+                                            FontSize="12"
+                                            Style="{StaticResource ExpanderToggleSymbol}"
+                                            StyleClass="ExpanderToggleSymbol"
+                                            Text="▼"
+                                            VerticalOptions="Center" />
+                                        <Label
+                                            FontAttributes="Bold"
+                                            FontSize="13"
+                                            Text="Formatted Content"
+                                            VerticalOptions="Center" />
+                                    </HorizontalStackLayout>
+                                    <VerticalStackLayout
+                                        Spacing="8"
+                                        Style="{StaticResource ExpanderBody}"
+                                        StyleClass="ExpanderBody">
+                                        <WebView x:Name="FormattedContentViewer" HeightRequest="320" />
+                                    </VerticalStackLayout>
+                                </VerticalStackLayout>
+                            </Border>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentPage>

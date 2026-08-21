@@ -18,7 +18,13 @@
 
         public static void ToggleExpander(object? sender, EventArgs e)
         {
-            if (sender is Element element)
+            Element? element = sender as Element;
+            if (sender is TapGestureRecognizer gestureRecognizer)
+            {
+                element = gestureRecognizer.Parent;
+            }
+
+            if (element is not null)
             {
                 var container = FindAncestor<Border>(element);
                 if (container != null)

@@ -26,11 +26,16 @@
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-                    <Label x:Name="OneNoteStatusLabel"
+                    <Border 
+                        Stroke="DodgerBlue"
+                        StrokeThickness="1"
+                        StrokeShape="{RoundRectangle CornerRadius=6}"
+                    >
+                        <Label x:Name="OneNoteStatusLabel"
                            Text="Status: Ready"
                            TextColor="Gray"
-                           FontSize="12"
-                           VerticalOptions="StartAndExpand" />
+                           FontSize="12" />
+                    </Border>
                 </Grid>
 
                 <FlexLayout Grid.Row="1" Wrap="Wrap" Direction="Row" AlignItems="Center" AlignContent="Start">
@@ -38,21 +43,11 @@
                             Text="Start Listening"
                             Clicked="ListeningToggleButton_Clicked"
                             Margin="0,0,8,8"
-                            Padding="8,0"
-                            BorderWidth="0"
-                            CornerRadius="4"
-                            FontSize="12"
-                            HeightRequest="24"
-                            MinimumHeightRequest="24" />
+                             />
                     <Button Text="Clear Display"
                             Clicked="ClearDisplayButton_Clicked"
                             Margin="0,0,8,8"
-                            Padding="8,0"
-                            BorderWidth="0"
-                            CornerRadius="4"
-                            FontSize="12"
-                            HeightRequest="24"
-                            MinimumHeightRequest="24" />
+                            />
                     <HorizontalStackLayout Margin="0,0,16,8" VerticalOptions="Center" Spacing="0">
                         <CheckBox x:Name="WordWrapCheckBox"
                                   IsChecked="True"
@@ -76,30 +71,15 @@
                     <Button Text="Set Date"
                             Clicked="SetDateContextButton_Clicked"
                             Margin="0,0,16,8"
-                            Padding="8,0"
-                            BorderWidth="0"
-                            CornerRadius="4"
-                            FontSize="12"
-                            HeightRequest="24"
-                            MinimumHeightRequest="24" />
+                    />
                     <Button Text="Read Clipboard"
                             Clicked="ReadClipboardButton_Clicked"
                             Margin="0,0,8,8"
-                            Padding="8,0"
-                            BorderWidth="0"
-                            CornerRadius="4"
-                            FontSize="12"
-                            HeightRequest="24"
-                            MinimumHeightRequest="24" />
+                    />
                     <Button Text="Write to Excel"
                             Clicked="WriteToExcelButton_Clicked"
                             Margin="0,0,8,8"
-                            Padding="8,0"
-                            BorderWidth="0"
-                            CornerRadius="4"
-                            FontSize="12"
-                            HeightRequest="24"
-                            MinimumHeightRequest="24" />
+                    />
                 </FlexLayout>
 
                 <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,0,0,4">

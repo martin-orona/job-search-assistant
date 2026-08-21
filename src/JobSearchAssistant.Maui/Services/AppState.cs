@@ -7,12 +7,15 @@ public class AppState
     [JsonPropertyName("window")]
     public WindowState Window { get; set; } = new WindowState();
 
- 
+
     [JsonPropertyName("navigation")]
     public NavigationState Navigation { get; set; } = new NavigationState();
 
     [JsonPropertyName("resumeAnalyzer")]
     public ResumeAnalyzerState ResumeAnalyzer { get; set; } = new ResumeAnalyzerState();
+
+    [JsonPropertyName("jobListings")]
+    public JobListingsState JobListings { get; set; } = new JobListingsState();
 
 }
 
@@ -21,9 +24,9 @@ public class NavigationState
     [JsonPropertyName("selectedTabIndex")]
     public int SelectedTabIndex { get; set; } = 0;
 
- }
+}
 
-public class ResumeAnalyzerState 
+public class ResumeAnalyzerState
 {
     [JsonPropertyName("aiPromptExpanded")]
     public bool AiPromptExpanded { get; set; } = true;
@@ -65,4 +68,29 @@ public class WindowState
     public double Width { get; set; }
     [JsonPropertyName("height")]
     public double Height { get; set; }
+}
+
+public class JobListingsState
+{
+    [JsonPropertyName("url")]
+    public string Url { get; set; } = string.Empty;
+
+    [JsonPropertyName("listingPageExpanded")]
+    public bool ListingPageExpanded { get; set; } = true;
+    [JsonPropertyName("extractedJobListingExpanded")]
+    public bool ExtractedJobListingExpanded { get; set; } = true;
+    [JsonPropertyName("extractedContentExpanded")]
+    public bool ExtractedContentExpanded { get; set; } = true;
+    [JsonPropertyName("extractedFilePath")]
+    public string ExtractedFilePath { get; set; } = string.Empty;
+    [JsonPropertyName("formattedListingHtml")]
+    public string FormattedListingHtml { get; set; } = string.Empty;
+    [JsonPropertyName("formattedContentExpanded")]
+    public bool FormattedContentExpanded { get; set; } = true;
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = string.Empty;
+    [JsonPropertyName("company")]
+    public string Company { get; set; } = string.Empty;
+    [JsonPropertyName("location")]
+    public string Location { get; set; } = string.Empty;
 }

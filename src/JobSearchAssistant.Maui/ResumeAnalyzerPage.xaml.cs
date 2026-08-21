@@ -8,9 +8,21 @@ public partial class ResumeAnalyzerPage : ContentPage
     private readonly AppStateService _stateService = new();
     private bool _isFirstAppearing = true;
 
+    public string JobDescriptionContent
+    {
+        get => JobDescriptionEditor.Text ?? string.Empty;
+        set => JobDescriptionEditor.Text = value;
+    }
+
     public ResumeAnalyzerPage()
     {
         InitializeComponent();
+    }
+
+    public void SetJobDescriptionContent(string content)
+    {
+        JobDescriptionEditor.Text = content;
+        SaveState();
     }
 
     protected override void OnAppearing()
@@ -82,7 +94,7 @@ public partial class ResumeAnalyzerPage : ContentPage
 
     private void LoadFileContentIfExists(string filePath, Editor editor)
     {
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) { return; }
         try { editor.Text = File.ReadAllText(filePath); } catch { }
     }
 
@@ -95,7 +107,7 @@ public partial class ResumeAnalyzerPage : ContentPage
         try
         {
             var text = await Clipboard.GetTextAsync();
-            if (!string.IsNullOrEmpty(text)) editor.Text = text;
+            if (!string.IsNullOrEmpty(text)) { editor.Text = text; }
         }
         catch (Exception ex)
         {
@@ -143,7 +155,7 @@ public partial class ResumeAnalyzerPage : ContentPage
     {
         try
         {
-            if (File.Exists(filePath)) editor.Text = await File.ReadAllTextAsync(filePath);
+            if (File.Exists(filePath)) { editor.Text = await File.ReadAllTextAsync(filePath); }
         }
         catch (Exception ex)
         {
@@ -182,17 +194,38 @@ public partial class ResumeAnalyzerPage : ContentPage
         }
     }
 
-    private void OnPromptAiClicked(object? sender, EventArgs e)
+    public async void OnPromptAiClicked(object? sender, EventArgs e) => await GenerateAiPromptAndLaunchAiWebsite();
+
+    public async Task<bool> GenerateAiPromptAndLaunchAiWebsite()
     {
-        OnGeneratePromptClicked(sender, e);
-        OnOpenAiClicked(sender, e);
+        var result = await GenerateAiPrompt();
+        result = result && await OnOpenAiClicked();
+        return result;
     }
 
-    private async void OnGeneratePromptClicked(object? sender, EventArgs e)
+    private async void OnGeneratePromptClicked(object? sender, EventArgs e) => await GenerateAiPrompt();
+
+
+    private async Task<bool> GenerateAiPrompt()
     {
-        if (string.IsNullOrWhiteSpace(TemplateFilePath.Text)) { ShowStatus("Select an AI prompt template first", Colors.Orange); return; }
-        if (string.IsNullOrWhiteSpace(ResumeFilePath.Text)) { ShowStatus("Select a resume first", Colors.Orange); return; }
-        if (string.IsNullOrWhiteSpace(JobDescriptionFilePath.Text)) { ShowStatus("Select a job description first", Colors.Orange); return; }
+        if (string.IsNullOrWhiteSpace(TemplateEditor.Text))
+        {
+            ShowStatus("Select an AI prompt template first", Colors.Orange);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(ResumeEditor.Text))
+        {
+            ShowStatus("Select a resume first", Colors.Orange);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(JobDescriptionEditor.Text))
+        {
+            ShowStatus("Select a job description first", Colors.Orange);
+            return false;
+        }
+
         try
         {
             string generatedPrompt = (TemplateEditor.Text ?? string.Empty)
@@ -202,7 +235,13 @@ public partial class ResumeAnalyzerPage : ContentPage
             await Clipboard.SetTextAsync(generatedPrompt);
             ShowStatus("Prompt generated and copied to clipboard", Colors.Green);
         }
-        catch (Exception ex) { ShowStatus($"Failed to generate prompt: {ex.Message}", Colors.Red); }
+        catch (Exception ex)
+        {
+            ShowStatus($"Failed to generate prompt: {ex.Message}", Colors.Red);
+            return false;
+        }
+
+        return true;
     }
 
     private async void OnCopyPromptClicked(object? sender, EventArgs e)
@@ -216,21 +255,37 @@ public partial class ResumeAnalyzerPage : ContentPage
         catch (Exception ex) { ShowStatus($"Failed to copy: {ex.Message}", Colors.Red); }
     }
 
-    private async void OnOpenAiClicked(object? sender, EventArgs e)
+    private async void OnOpenAiClicked(object? sender, EventArgs e) => await OnOpenAiClicked();
+
+    private async Task<bool> OnOpenAiClicked()
     {
         try
         {
             string url = AiUrlEntry.Text?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(url)) { await DisplayAlertAsync("Error", "Enter an AI URL first", "OK"); return; }
-            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) url = "https://" + url;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                await DisplayAlertAsync("Error", "Enter an AI URL first", "OK");
+                return false;
+            }
+
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "https://" + url;
+            }
+
             await Launcher.Default.OpenAsync(new Uri(url));
+            return true;
         }
-        catch (Exception ex) { await DisplayAlertAsync("Error", $"Failed to open URL: {ex.Message}", "OK"); }
+        catch (Exception ex)
+        {
+            await DisplayAlertAsync("Error", $"Failed to open URL: {ex.Message}", "OK");
+            return false;
+        }
     }
 
     private void OnAiUrlEntryUnfocused(object? sender, FocusEventArgs e) => SaveState();
 
-    private void ShowStatus(string message, Color? textColor = null)
+    public void ShowStatus(string message, Color? textColor = null)
     {
         StatusLabel.Text = message;
         StatusLabel.TextColor = textColor ?? Colors.Gray;

@@ -5,6 +5,8 @@ namespace JobSearchAssistant.Maui;
 public partial class MainPage : TabbedPage
 {
     private readonly AppStateService _stateService = new();
+    private bool _canPersistSelectedTab;
+    public int SelectedTabIndex { get; private set; }
 
     public MainPage()
     {
@@ -36,8 +38,36 @@ public partial class MainPage : TabbedPage
     protected override void OnCurrentPageChanged()
     {
         base.OnCurrentPageChanged();
+        int selectedTabIndex = Children.IndexOf(CurrentPage);
+        if (selectedTabIndex < 0)
+        {
+            return;
+        }
+
+        SelectedTabIndex = selectedTabIndex;
+        if (_canPersistSelectedTab)
+        {
+            SaveSelectedTabIndex();
+        }
+    }
+
+    public void RestoreSelectedTab(int selectedTabIndex)
+    {
+        if (Children.Count == 0)
+        {
+            return;
+        }
+
+        SelectedTabIndex = Math.Clamp(selectedTabIndex, 0, Children.Count - 1);
+        CurrentPage = Children[SelectedTabIndex];
+        _canPersistSelectedTab = true;
+        SaveSelectedTabIndex();
+    }
+
+    private void SaveSelectedTabIndex()
+    {
         var state = _stateService.LoadState();
-        state.Navigation.SelectedTabIndex = Children.IndexOf(CurrentPage);
+        state.Navigation.SelectedTabIndex = SelectedTabIndex;
         _stateService.SaveState(state);
     }
 }
