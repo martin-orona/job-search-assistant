@@ -53,12 +53,12 @@
       "problemMatcher": []
     },
     {
-      "label": "clean JobSearchAssistant.Maui",
+      "label": "clean Maui",
       "type": "shell",
       "command": "dotnet",
       "args": [
         "clean",
-        "${workspaceFolder}/src/JobSearchAssistant.Maui/JobSearchAssistant.Maui.csproj",
+        "${workspaceFolder}/src/Maui/Maui.csproj",
         "/property:GenerateFullPaths=true",
         "/p:Configuration=Debug"
       ],
@@ -74,12 +74,12 @@
       }
     },
     {
-      "label": "build JobSearchAssistant.Maui",
+      "label": "build Maui",
       "type": "shell",
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/src/JobSearchAssistant.Maui/JobSearchAssistant.Maui.csproj",
+        "${workspaceFolder}/src/Maui/Maui.csproj",
         "/property:GenerateFullPaths=true",
         "/p:Configuration=Debug"
       ],
@@ -95,13 +95,80 @@
       }
     },
     {
-      "label": "clean+build JobSearchAssistant.Maui",
+      "label": "clean+build Maui",
       "dependsOrder": "sequence",
       "dependsOn": [
-        "clean JobSearchAssistant.Maui",
-        "build JobSearchAssistant.Maui"
+        "clean Maui",
+        "build Maui"
       ],
       "problemMatcher": []
+    },
+    {
+      "label": "build Server",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/Server/Server.csproj",
+        "/property:GenerateFullPaths=true",
+        "/p:Configuration=Debug"
+      ],
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false,
+        "close": true
+      }
+    },
+    {
+      "label": "build active project",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\.vscode\\build-active-project.ps1",
+        "-ActiveFile",
+        "${file}"
+      ],
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false,
+        "close": false
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "start server",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\.vscode\\start-server.ps1"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "panel": "shared"
+      }
     }
   ]
 }

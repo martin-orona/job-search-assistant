@@ -1,7 +1,15 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/JobSearchAssistant.Core/JobSearchAssistant.Core.csproj" />
-    <Project Path="src/JobSearchAssistant.Maui/JobSearchAssistant.Maui.csproj" />
+    <Project Path="src/Maui/Maui.csproj" />
+    <Project Path="src/Server/Server.csproj" />
     <Project Path="src/JobSearchAssistant.Ui/JobSearchAssistant.Ui.csproj" />
+    <Project Path="src/Core/Core.csproj" Id="445ca1ea-a975-4838-9ff2-1717b29c8454" />
+    <Project Path="src/DB/DB.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/JobSearchAssistant.DB.Tests/JobSearchAssistant.DB.Tests.csproj" />
+    <Project Path="tests/JobSearchAssistant.Server.Tests/JobSearchAssistant.Server.Tests.csproj" />
+    <Project Path="tests/TestUtilities/TestUtilities.csproj" />
   </Folder>
 </Solution>

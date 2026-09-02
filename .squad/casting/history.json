@@ -1,0 +1,16 @@
+{
+  "universe_usage_history": [
+    {
+      "universe": "descriptive",
+      "used_at": "2026-09-01T04:49:04.029Z",
+      "assignment_id": "job-search-assistant-initial-setup"
+    }
+  ],
+  "assignment_cast_snapshots": {
+    "job-search-assistant-initial-setup": {
+      "created_at": "2026-09-01T04:49:04.029Z",
+      "universe": "descriptive",
+      "members": ["Lead", "Frontend", "Backend", "Extension", "Tester", "Scribe", "Ralph", "Rai", "Fact Checker"]
+    }
+  }
+}

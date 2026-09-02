@@ -1,0 +1,79 @@
+body {
+  margin: 0;
+  font: 14px/1.4 system-ui, sans-serif;
+  color: #111827;
+  background: #f9fafb;
+}
+
+.popup {
+  width: 360px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.hint {
+  margin: 0 0 16px;
+  color: #6b7280;
+}
+
+.panel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+button:active {
+  background: #1e40af;
+  transform: translateY(1px);
+}
+
+button:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 120px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.output {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #111827;
+  color: #d1fae5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}

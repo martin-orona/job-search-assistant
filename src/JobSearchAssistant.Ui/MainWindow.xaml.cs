@@ -147,7 +147,7 @@ public partial class MainWindow : Window
 
     private void MergeButton_Click(object sender, RoutedEventArgs e)
     {
-        GeneratePromptAndCopy();
+        GeneratePromptOnly();
     }
 
     private void SelectResumeFileButton_Click(object sender, RoutedEventArgs e)
@@ -204,12 +204,13 @@ public partial class MainWindow : Window
 
     private void GeneratePromptButton_Click(object sender, RoutedEventArgs e)
     {
-        GeneratePromptAndCopy();
+        GeneratePromptOnly();
     }
 
     private void PromptAiButton_Click(object sender, RoutedEventArgs e)
     {
-        GeneratePromptAndCopy();
+        GeneratePromptOnly();
+        CopyPromptButton_Click(sender, e);
         OpenAiButton_Click(sender, e);
     }
 
@@ -234,6 +235,8 @@ public partial class MainWindow : Window
 
     private void OpenAiButton_Click(object sender, RoutedEventArgs e)
     {
+        CopyPromptButton_Click(sender, e);
+
         string urlText = AiUrlTextBox.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(urlText))
         {
@@ -347,7 +350,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void GeneratePromptAndCopy()
+    private void GeneratePromptOnly()
     {
         // LoadFileContentIntoTextBox(ResumePathTextBox, ResumeContentTextBox);
         // LoadFileContentIntoTextBox(JobDescriptionPathTextBox, JobDescriptionContentTextBox);
@@ -382,16 +385,7 @@ public partial class MainWindow : Window
         GeneratedPromptTextBox.Text = generatedPrompt;
         GeneratedPromptTextBox.CaretIndex = 0;
         GeneratedPromptTextBox.ScrollToHome();
-
-        try
-        {
-            Clipboard.SetText(generatedPrompt);
-            UpdateResumeAnalyzerStatus("Prompt generated and copied to clipboard.", false);
-        }
-        catch (Exception ex)
-        {
-            UpdateResumeAnalyzerStatus($"Prompt generated, but copy failed. {ex.Message}", true);
-        }
+        UpdateResumeAnalyzerStatus("Prompt generated.", false);
     }
 
     private void UpdateResumeAnalyzerStatus(string message, bool isError)

@@ -17,10 +17,46 @@
             "name": "Maui UI Debug",
             "type": "coreclr",
             "request": "launch",
-            "preLaunchTask": "clean+build JobSearchAssistant.Maui",
-            "program": "${workspaceFolder}/src/JobSearchAssistant.Maui/bin/Debug/net10.0-windows10.0.19041.0/win-x64/JobSearchAssistant.Maui.exe",
-            "cwd": "${workspaceFolder}/src/JobSearchAssistant.Maui",
+            "preLaunchTask": "clean+build Maui",
+            "program": "${workspaceFolder}/src/Maui/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Maui.exe",
+            "cwd": "${workspaceFolder}/src/Maui",
             "stopAtEntry": false
+        },
+        {
+            "name": "Server Debug",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build Server",
+            "program": "${workspaceFolder}/src/Server/bin/Debug/net10.0/Server.exe",
+            "cwd": "${workspaceFolder}/src/Server",
+            "console": "integratedTerminal",
+            "stopAtEntry": false
+        },
+        {
+            "name": "Web.Ui Debug",
+            "type": "pwa-node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/src/Web.Ui",
+            "runtimeExecutable": "corepack",
+            "runtimeArgs": [
+                "pnpm",
+                "dev"
+            ],
+            "console": "integratedTerminal",
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "Local:\\s+(https?://\\S+)",
+                "uriFormat": "%s"
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "debug Web",
+            "configurations": [
+                "Server Debug",
+                "Web.Ui Debug"
+            ]
         }
     ]
 }

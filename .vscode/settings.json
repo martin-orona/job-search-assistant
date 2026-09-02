@@ -1,5 +1,13 @@
 {
     "chat.tools.terminal.autoApprove": {
-        "dotnet build": true
-    }
+        "dotnet build": true,
+        "dotnet test": true,
+        "ForEach-Object": true,
+        "git add": true,
+        "git check-ignore": true
+    },
+    "files.exclude": {
+        "src/web-browser-extension": true
+    },
+    "chat.newSession.defaultMode": "Squad"
 }

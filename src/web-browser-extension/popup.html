@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Job Search Assistant</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Job Search Assistant</h1>
+      <p class="hint">Use the active tab you want to capture or fill.</p>
+
+      <section class="panel">
+        <button id="capture-button" type="button">Capture page</button>
+        <pre id="capture-output" class="output">No page captured yet.</pre>
+      </section>
+
+      <section class="panel">
+        <label for="fill-input">Fill fields JSON</label>
+        <textarea
+          id="fill-input"
+          spellcheck="false"
+          rows="8"
+        >[
+  { "selector": "#job-post-url", "value": "https://example.com" }
+]</textarea>
+        <button id="fill-button" type="button">Fill page</button>
+        <pre id="fill-output" class="output">No fill action yet.</pre>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

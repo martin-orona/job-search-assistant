@@ -1,0 +1,575 @@
+.app-shell {
+  min-height: 100svh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 24px;
+  box-sizing: border-box;
+}
+
+.tabs {
+  width: min(960px, 100%);
+}
+
+.tab-list {
+  display: flex;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.tab-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  padding: 14px 18px;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+.tab-button:hover {
+  color: var(--text-h);
+  background: color-mix(in srgb, var(--accent-bg) 50%, transparent);
+  border-radius: 6px 6px 0 0;
+}
+
+.tab-button:active {
+  opacity: 0.8;
+  transform: translateY(1px);
+}
+
+.tab-button[aria-selected='true'] {
+  color: var(--text-h);
+  border-bottom-color: var(--accent);
+}
+
+.tab-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.tab-panel {
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg) 92%, var(--border) 8%);
+  text-align: left;
+}
+
+.tab-panel h1 {
+  margin-top: 0;
+}
+
+.job-postings {
+  display: grid;
+  gap: 20px;
+}
+
+.job-postings-field {
+  display: grid;
+  gap: 8px;
+}
+
+.job-postings-input-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.job-postings-input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  color: var(--text-h);
+  background: var(--bg);
+}
+
+/* Shared Button Utility Classes */
+.button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+.button:hover {
+  background: var(--accent-bg);
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.button:active {
+  transform: translateY(1px);
+  opacity: 0.8;
+}
+
+.button--primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.button--primary:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #fff 15%);
+  border-color: color-mix(in srgb, var(--accent) 85%, #fff 15%);
+  color: var(--bg);
+}
+
+.button--primary:active {
+  transform: translateY(1px);
+  opacity: 0.85;
+}
+
+.button--delete {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+.button--delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.button--delete:active {
+  transform: translateY(1px);
+  opacity: 0.8;
+}
+
+.card-actions .button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.expander-summary-button {
+  margin-left: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.job-postings-expander summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.job-postings-expander-summary {
+  display: flex;
+  align-items: center;
+}
+
+.job-postings-frame-wrap {
+  margin-top: 16px;
+}
+
+.job-postings-frame,
+.job-postings-placeholder {
+  width: 100%;
+  min-height: 70svh;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  box-sizing: border-box;
+}
+
+.job-postings-frame {
+  display: block;
+}
+
+.job-postings-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--text);
+  text-align: center;
+}
+
+.job-postings-formatted--no-images img,
+.job-postings-formatted--no-images svg {
+  display: none;
+}
+
+.job-postings-formatted--no-buttons button {
+  display: none;
+}
+
+.job-postings-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-top: 12px;
+}
+
+.job-postings-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.job-postings-formatted {
+  margin-top: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  min-height: 200px;
+  max-height: 60svh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  font: 14px/1.6 system-ui, sans-serif;
+  color: var(--text);
+}
+
+.job-postings-formatted h1,
+.job-postings-formatted h2,
+.job-postings-formatted h3 {
+  margin: 0.75em 0 0.25em;
+}
+
+.job-postings-formatted ul,
+.job-postings-formatted ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.job-postings-markdown {
+  display: block;
+  margin-top: 16px;
+  width: 100%;
+  min-height: 300px;
+  max-height: 60svh;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.job-postings-empty-state {
+  margin: 12px 0 0;
+  color: var(--text);
+}
+
+.job-postings-saved-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.job-postings-saved-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.job-postings-saved-summary {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 12px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  font: inherit;
+  text-align: left;
+  min-width: 0;
+  transition: background-color 0.15s ease;
+}
+
+.job-postings-saved-summary:hover {
+  background: color-mix(in srgb, var(--accent-bg) 40%, transparent);
+}
+
+.job-postings-saved-summary:active {
+  background: color-mix(in srgb, var(--accent-bg) 70%, transparent);
+}
+
+.job-postings-saved-summary > span {
+  min-width: 0;
+}
+
+.job-postings-saved-details {
+  display: grid;
+  gap: 8px;
+  padding: 0 14px 12px;
+  font-size: 0.92rem;
+}
+
+.job-postings-saved-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.job-postings-saved-source-expander {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.job-postings-saved-source-expander summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.job-postings-saved-source-details {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  word-break: break-word;
+}
+
+.job-postings-saved-markdown {
+  margin-top: 8px;
+  min-height: 180px;
+  max-height: 320px;
+}
+
+.job-postings-saved-separator {
+  margin: 0 6px;
+  color: var(--muted, #888);
+}
+
+.job-postings-saved-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  justify-content: space-between;
+}
+
+.resume-analyzer {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+.resume-analyzer-status {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.resume-analyzer-expander {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.resume-analyzer-expander summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  font-weight: 600;
+}
+
+.resume-analyzer-expander summary::-webkit-details-marker {
+  display: none;
+}
+
+.resume-analyzer-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.resume-analyzer-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.resume-analyzer-actions-row button,
+.resume-analyzer-actions-row input {
+  min-height: 32px;
+}
+
+.resume-analyzer-actions-row input {
+  flex: 1 1 180px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.resume-analyzer-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 70%, var(--bg) 30%);
+}
+
+.resume-analyzer-resume-primary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.resume-analyzer-resume-primary-row input {
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.resume-analyzer-card .resume-analyzer-editor {
+  min-height: 260px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.resume-analyzer-inner-expander {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.resume-analyzer-inner-expander summary {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.resume-analyzer-refresh-button {
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 4px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+.resume-analyzer-refresh-button:hover {
+  background: var(--accent-bg);
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.resume-analyzer-refresh-button:active {
+  transform: translateY(1px);
+  opacity: 0.8;
+}
+
+.resume-analyzer-editor {
+  width: 100%;
+  min-height: 180px;
+  max-height: 320px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  padding: 12px;
+  resize: vertical;
+  box-sizing: border-box;
+  font: 13px/1.5 ui-monospace, "Cascadia Code", monospace;
+}
+
+.resume-analyzer-empty-state {
+  margin: 12px 14px 14px;
+  color: var(--text);
+}
+
+.resume-analyzer-saved-list {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.resume-analyzer-saved-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.resume-analyzer-saved-resume summary {
+  list-style: none;
+}
+
+.resume-analyzer-saved-resume summary::-webkit-details-marker {
+  display: none;
+}
+
+.resume-analyzer-saved-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.resume-analyzer-saved-summary:hover {
+  background: color-mix(in srgb, var(--accent-bg) 40%, transparent);
+}
+
+.resume-analyzer-saved-summary:active {
+  background: color-mix(in srgb, var(--accent-bg) 70%, transparent);
+}
+
+.resume-analyzer-saved-details {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  font: 13px/1.5 ui-monospace, "Cascadia Code", monospace;
+}
+
+.resume-analyzer-saved-details .resume-analyzer-inner-expander {
+  margin-top: 10px;
+}
+
+.resume-analyzer-document-content {
+  border-top: 1px solid var(--border);
+  padding: 10px;
+}
