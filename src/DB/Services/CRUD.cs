@@ -814,6 +814,14 @@ internal sealed record RequireOneWhenCreatingGroup
     required internal string Message { get; init; }
 }
 
+/// <summary>A resolved child-object/foreign-key-id pairing derived from the `{PropertyName}Id` naming convention; no attribute is involved.</summary>
+internal sealed record IdsMustMatchGroup
+{
+    required internal PropertyInfo Model { get; init; }
+
+    required internal PropertyInfo ForeignKeyId { get; init; }
+}
+
 internal class CrudGeneratorInfo
 {
     required internal FrozenDictionary<string, PropertyInfo> ValidProperties { get; set; }
@@ -833,6 +841,8 @@ internal class CrudGeneratorInfo
     required internal IReadOnlyList<PropertyInfo> RequiredWhenUpdatingProperties { get; set; }
 
     required internal IReadOnlyList<RequireOneWhenCreatingGroup> RequireOneWhenCreatingGroups { get; set; }
+
+    required internal IReadOnlyList<IdsMustMatchGroup> IdsMustMatchGroups { get; set; }
 
     required internal IReadOnlyList<PropertyInfo> ModelProperties { get; set; }
 }
@@ -859,6 +869,7 @@ internal static class CrudInfoGeneration
             RequiredWhenCreatingProperties = GetRequiredWhenCreatingProperties<T>(),
             RequiredWhenUpdatingProperties = GetRequiredWhenUpdatingProperties<T>(),
             RequireOneWhenCreatingGroups = GetRequireOneWhenCreatingGroups<T>(),
+            IdsMustMatchGroups = GetIdsMustMatchGroups<T>(),
             ModelProperties = GetModelProperties<T>(),
         };
 
@@ -884,6 +895,7 @@ internal static class CrudInfoGeneration
             RequiredWhenCreatingProperties = new List<PropertyInfo>().AsReadOnly(),
             RequiredWhenUpdatingProperties = new List<PropertyInfo>().AsReadOnly(),
             RequireOneWhenCreatingGroups = new List<RequireOneWhenCreatingGroup>().AsReadOnly(),
+            IdsMustMatchGroups = new List<IdsMustMatchGroup>().AsReadOnly(),
             ModelProperties = new List<PropertyInfo>().AsReadOnly(),
         };
         return crufInfo;
@@ -944,6 +956,27 @@ internal static class CrudInfoGeneration
                     Message = attribute.FormatErrorMessage(property.Name),
                 });
             }
+        }
+
+        return groups.AsReadOnly();
+    }
+
+    // derives the pairing from the {PropertyName}Id naming convention already used everywhere else in this codebase;
+    // a missing sibling id property is the natural opt-out ("nothing to reconcile"), not an error
+    internal static IReadOnlyList<IdsMustMatchGroup> GetIdsMustMatchGroups<T>()
+    {
+        var modelType = typeof(T);
+        var groups = new List<IdsMustMatchGroup>();
+
+        foreach (var modelProperty in GetModelProperties<T>())
+        {
+            var idProperty = modelType.GetProperty($"{modelProperty.Name}Id", BindingFlags.Public | BindingFlags.Instance);
+            if (idProperty is null)
+            {
+                continue;
+            }
+
+            groups.Add(new IdsMustMatchGroup { Model = modelProperty, ForeignKeyId = idProperty });
         }
 
         return groups.AsReadOnly();
@@ -1046,10 +1079,15 @@ public static class CrudValidator
 
         ValidateRequiredProperties(data, crudInfo, mode, path, errors);
 
-        // the update and patch modes are covered by [RequiredWhenUpdating] on the foreign key id property
         if (mode == ValidationMode.Create)
         {
+            // create forbids providing both a child object and its foreign key id at all, so there is nothing to reconcile
             ValidateRequireOneWhenCreatingGroups(data, crudInfo, path, errors);
+        }
+        else
+        {
+            // update (and, via ValidatePatchFields, patch) may legitimately provide both; they just need to agree
+            ValidateIdsMustMatchGroups(data, crudInfo, path, errors);
         }
 
         // mirrors the CRUD recursion: every nested model is validated under the same mode
@@ -1146,6 +1184,36 @@ public static class CrudValidator
         }
     }
 
+    private static void ValidateIdsMustMatchGroups(Model data, CrudGeneratorInfo crudInfo, string path, List<ValidationError> errors)
+    {
+        foreach (var group in crudInfo.IdsMustMatchGroups)
+        {
+            if (group.Model.GetValue(data) is not Model child || child.Id == 0)
+            {
+                continue;
+            }
+
+            if (!HasProvidedValue(group.ForeignKeyId, data))
+            {
+                continue;
+            }
+
+            var fkValue = group.ForeignKeyId.GetValue(data);
+            if (Equals(child.Id, fkValue))
+            {
+                continue;
+            }
+
+            var childPath = BuildPath(path, group.Model.Name);
+            var fkPath = BuildPath(path, group.ForeignKeyId.Name);
+            errors.Add(new ValidationError
+            {
+                Field = childPath,
+                Message = $"Field [{childPath}] has Id [{child.Id}] which does not match [{fkPath}] value [{fkValue}]. When both are provided, they must match.",
+            });
+        }
+    }
+
     private static void ValidatePatchFields(Type modelType, Dictionary<string, object?> patchFields, string path, List<ValidationError> errors)
     {
         if (!CrudInfoGeneration.CrudInfo.TryGetValue(modelType, out var crudInfo))
@@ -1207,6 +1275,81 @@ public static class CrudValidator
                 });
                 return;
             }
+        }
+
+        // patch payloads are dictionaries, not typed Model instances, so both sides of a group must be
+        // read back out of the same patch dictionary rather than off reflected properties
+        ValidatePatchIdsMustMatchGroups(crudInfo, patchFields, path, errors);
+    }
+
+    private static void ValidatePatchIdsMustMatchGroups(CrudGeneratorInfo crudInfo, Dictionary<string, object?> patchFields, string path, List<ValidationError> errors)
+    {
+        foreach (var group in crudInfo.IdsMustMatchGroups)
+        {
+            if (!TryGetPatchFieldValue(patchFields, group.Model.Name, out var modelValue) || !TryGetPatchId(modelValue, out var childId) || childId == 0)
+            {
+                continue;
+            }
+
+            if (!TryGetPatchFieldValue(patchFields, group.ForeignKeyId.Name, out var fkValue) || !TryGetPatchId(fkValue, out var fkId))
+            {
+                continue;
+            }
+
+            if (childId == fkId)
+            {
+                continue;
+            }
+
+            var childPath = BuildPath(path, group.Model.Name);
+            var fkPath = BuildPath(path, group.ForeignKeyId.Name);
+            errors.Add(new ValidationError
+            {
+                Field = childPath,
+                Message = $"Field [{childPath}] has Id [{childId}] which does not match [{fkPath}] value [{fkId}]. When both are provided, they must match.",
+            });
+        }
+    }
+
+    // patch dictionary keys arrive in whatever case the caller sent (typically camelCase from JSON), while
+    // group property names are the PascalCase reflected names, so lookup must ignore case
+    private static bool TryGetPatchFieldValue(Dictionary<string, object?> patchFields, string propertyName, out object? value)
+    {
+        foreach (var kvp in patchFields)
+        {
+            if (string.Equals(kvp.Key, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = kvp.Value;
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
+    }
+
+    // a nested child's id and a foreign key id can each arrive as a JsonElement (HTTP path) or a plain
+    // CLR value (direct in-process calls), so both shapes must be understood here
+    private static bool TryGetPatchId(object? value, out int id)
+    {
+        switch (value)
+        {
+            case JsonElement { ValueKind: JsonValueKind.Object } element when element.TryGetProperty("id", out var idElement):
+                return TryGetPatchId(idElement, out id);
+            case JsonElement { ValueKind: JsonValueKind.Number } numberElement when numberElement.TryGetInt32(out var numericId):
+                id = numericId;
+                return true;
+            case JsonElement { ValueKind: JsonValueKind.String } stringElement when int.TryParse(stringElement.GetString(), out var parsedId):
+                id = parsedId;
+                return true;
+            case Dictionary<string, object?> dict when dict.TryGetValue("id", out var nestedIdValue):
+                return TryGetPatchId(nestedIdValue, out id);
+            case int intValue:
+                id = intValue;
+                return true;
+            default:
+                id = 0;
+                return false;
         }
     }
 

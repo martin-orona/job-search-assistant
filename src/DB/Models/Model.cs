@@ -1,7 +1,5 @@
 namespace JobSearchAssistant.DB.Models;
 
-using System.ComponentModel.DataAnnotations;
-
 using JobSearchAssistant.Core;
 
 public class Model

@@ -46,16 +46,10 @@ public class BadRequestException : AppException
 
 public class ValidationException : AppException
 {
-    public ValidationException(string message, IReadOnlyList<ValidationError> validationErrors) : this(message, validationErrors, null)
-    {
-    }
+    public ValidationException(string message, IReadOnlyList<ValidationError> validationErrors) : base(ExpandMessage(message, validationErrors)) => this.ValidationErrors = validationErrors;
 
     public ValidationException(string message, IReadOnlyList<ValidationError> validationErrors, Exception innerException)
-    : base(ExpandMessage(message, validationErrors), innerException)
-    {
-        // : base(message, innerException) => this.ValidationErrors = validationErrors;
-        this.ValidationErrors = validationErrors;
-    }
+    : base(ExpandMessage(message, validationErrors), innerException) => this.ValidationErrors = validationErrors;
 
     public IReadOnlyList<ValidationError> ValidationErrors { get; }
 

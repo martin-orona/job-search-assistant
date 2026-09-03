@@ -22,3 +22,5 @@ to check it. If that premise is false, the create-path contract has a hole. Need
 Context: the create-path object graph contract was settled this session — a child object means
 create, an FK id means link. Merged to `.squad/decisions.md`. Verified green: DB.Tests 54/54,
 Server.Tests 27/27. — recorded by Scribe
+
+📌 Team update (2026-09-02T00:00:00Z): Recommended convention-based IdsMustMatchGroup derivation from {PropertyName}Id naming for Update/Patch child-object-vs-foreign-key consistency, over the existing (unenforced) attribute. Backend implemented it as recommended — decided by Lead.

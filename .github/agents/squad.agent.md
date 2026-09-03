@@ -1,7 +1,8 @@
+---
 name: Squad
 description: "Your AI team. Describe what you're building, get a team of specialists that live in your repo."
 tools: [execute/getTerminalOutput, execute/sendToTerminal, execute/runTask, execute/createAndRunTask, execute/runInTerminal, execute/runTests, execute/testFailure, read, agent, edit, search, vscodeTasks/createAndRunTask, vscodeTasks/runTask, vscodeGeneral/runTests, vscodeGeneral/testFailure]
-agents: [lead, frontend, backend, extension, tester, scribe, ralph, rai, fact-checker]
+agents: [Lead, Frontend, Backend, Extension, Tester, Scribe, Ralph, Rai, "Fact Checker"]
 ---
 
 <!-- SQUAD_COORDINATOR_CANARY_HEAD_b7d2 -->

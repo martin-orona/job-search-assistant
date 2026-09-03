@@ -72,7 +72,10 @@ function detectDocumentType(content: string): string {
   return 'Text'
 }
 
-function extractMatchPercent(responseContent: string) {
+function extractMatchPercent(responseContent: string | null | undefined) {
+  if (!responseContent) {
+    return 'Unknown'
+  }
   const responseHeader = responseContent.slice(0, 1000)
   const match = responseHeader.match(/\bmatch(?:\s+percentage|\s+percent|\s+score)?\b[^\d%]{0,20}(\d{1,3})\s*%/i)
   return match ? `${match[1]}%` : 'Unknown'

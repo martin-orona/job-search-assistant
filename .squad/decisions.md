@@ -119,6 +119,126 @@ independently by the coordinator, not self-reported.
 **Open:** The update and patch paths still accept a persisted child object with a matching foreign key
 id. Martin is handling that as a separate thread; this decision covers the create path only.
 
+### 2026-09-02: Update/Patch child-object-vs-foreign-key consistency check should be convention-based, not attribute-based
+
+**By:** Lead (requested by Martin)
+
+**What:** The gap identified in the 2026-09-01 "RequireOneWhenCreating is a group rule" decision's
+"Open" note — Update/Patch accepting a nested child object *and* a matching `{Name}Id` foreign key with
+no check that they agree — should be closed by deriving the pairing automatically at CRUD registration
+time from `CrudGeneratorInfo.ModelProperties` plus a `{PropertyName}Id` naming convention, not by the
+`IdsMustMatchIfBothPresentWhenUpdatingAttribute` Martin already added to `ValidationError.cs` and applied
+to `Document`/`JobPosting`/`Resume`/`AiPromptTemplate`/`PromptDocument`/`ResponseDocument` in
+[Model.cs](../../src/DB/Models/Model.cs) and [AiPrompt.cs](../../src/DB/Models/AiPrompt.cs).
+
+Sketch of the registration-time resolution (mirrors `GetRequireOneWhenCreatingGroups<T>()`, does not
+require an attribute lookup):
+
+```csharp
+internal static IReadOnlyList<IdsMustMatchGroup> GetIdsMustMatchGroups<T>()
+{
+    var modelType = typeof(T);
+    var groups = new List<IdsMustMatchGroup>();
+
+    foreach (var modelProperty in GetModelProperties<T>())
+    {
+        var idProperty = modelType.GetProperty($"{modelProperty.Name}Id", BindingFlags.Public | BindingFlags.Instance);
+        if (idProperty is null)
+        {
+            continue; // no {Name}Id sibling -> nothing to reconcile, not an error
+        }
+
+        groups.Add(new IdsMustMatchGroup { Model = modelProperty, Id = idProperty });
+    }
+
+    return groups.AsReadOnly();
+}
+```
+
+`ValidateModel` gains an unconditional (Update and Patch) pass, `ValidateIdsMustMatchGroups`, run
+alongside `ValidateRequireOneWhenCreatingGroups`: for each group, if both `group.Model` (non-null, any
+`Id`) and `group.Id` (`HasProvidedValue`) are present and `((Model)group.Model.GetValue(data)).Id !=
+group.Id.GetValue(data)`, add one `ValidationError`. `IdsMustMatchIfBothPresentWhenUpdatingAttribute`
+should be deleted from `ValidationError.cs` and its usages removed from `Model.cs` / `AiPrompt.cs` —
+dead metadata that enforces nothing should not stay in the model files once the real check exists
+elsewhere, or the next reader will assume it's load-bearing.
+
+**Why:** Verified against every current `Model`-typed property across `Document`, `JobPosting`,
+`Resume`, `AiPrompt`, and `AiPromptTemplate` — a `{PropertyName}Id` sibling exists in 100% of cases
+today, so the naming convention already holds with zero exceptions and needs no opt-out mechanism yet.
+An attribute-based check has the exact "forgotten annotation → silently unchecked" failure mode Martin
+flagged, and the codebase already has one live instance of that risk in `[RequireOneWhenCreating]`
+(mitigated there only by `ResolveGroupProperty` throwing on a *misspelled* name, not on a missing
+attribute). Convention-based derivation from `ModelProperties` — which `CrudGeneratorInfo` already
+computes for every model via reflection, not developer opt-in — applies the check to every nested model
+property unconditionally; a developer adding a new `Document`-typed property to a model gets the check
+for free as long as they follow the `{Name}Id` naming convention the codebase already uses everywhere.
+The absence of a same-named `Id` property is not an error case to guard against: `GetModelProperties<T>`
+already recurses into every nested model regardless of whether an `Id` sibling exists, so "no sibling
+found" naturally means "nothing to reconcile," not "developer forgot something."
+
+**Consequence:** No attribute needed on new model properties for this rule to apply; the convention
+becomes a documented codebase invariant (record in `docs/CODING-STANDARDS.md`) rather than a per-property
+opt-in. If a future property genuinely needs a `Model`-typed field with no matching foreign key column
+(the convention breaking), the resolver's `continue` on a missing `{Name}Id` property already acts as
+the opt-out — no attribute or exception list required. This is an analysis/recommendation only; Backend
+should implement `GetIdsMustMatchGroups<T>`, wire it into `CrudGeneratorInfo` and `ValidateModel`, remove
+the dead attribute, and add coverage in `ControllerCrudTests.cs` for the both-present-but-mismatched
+Update/Patch case.
+
+**Open:** Whether `ValidateIdsMustMatchGroups` should also run on Patch when only one of the two keys is
+present in the patch dictionary (e.g., patch supplies `document.id` but not `documentId`, and the
+existing persisted `documentId` differs) — that requires comparing against the *persisted* row, not just
+the patch payload, which `ValidatePatchFields`'s current shape doesn't support. Left for Backend to
+resolve during implementation; flagging so it isn't missed.
+
+### 2026-09-02: Update/Patch child-object-vs-foreign-key consistency check implemented convention-based, per Lead's design
+
+**By:** Backend (requested by Martin)
+
+**What:** Implemented Lead's convention-based recommendation (see preceding decision) closing the
+Update/Patch gap flagged in the 2026-09-01 "RequireOneWhenCreating is a group rule" decision.
+`CrudInfoGeneration.GetIdsMustMatchGroups<T>()` derives a resolved `IdsMustMatchGroup { Model, ForeignKeyId }`
+pairing for every `Model`-typed property already collected by `GetModelProperties<T>()`, by looking for a
+sibling `{PropertyName}Id` property via reflection — mirroring `GetRequireOneWhenCreatingGroups<T>()` but
+with zero attribute involvement. A missing `{PropertyName}Id` sibling is the natural opt-out (`continue`,
+no error). The groups are stored on `CrudGeneratorInfo.IdsMustMatchGroups` and populated in both
+`GenerateCrudInfo<T>` and the empty fallback in `GetCrudInfo<T>`.
+
+`CrudValidator.ValidateModel` now runs `ValidateIdsMustMatchGroups` for the `else` branch (Update; Create
+already forbids providing both, so it keeps running only `ValidateRequireOneWhenCreatingGroups`). For
+Patch — which never reaches `ValidateModel` since patch payloads are `Dictionary<string, object?>`, not
+typed `Model` instances — the equivalent check lives in `ValidatePatchFields` as
+`ValidatePatchIdsMustMatchGroups`, reading both sides (the nested object's `"id"` and the sibling
+`{Name}Id` scalar) back out of the same patch dictionary, tolerant of both `JsonElement` (HTTP path) and
+plain CLR values (direct in-process calls). Both checks only fire when *both* sides are present in the
+same request/dictionary; a single side present is the already-covered link/leave-untouched case and is a
+no-op here.
+
+Removed the dead `IdsMustMatchIfBothPresentWhenUpdatingAttribute` from
+[ValidationError.cs](../../src/Core/Validation/ValidationError.cs) and its `[IdsMustMatchIfBothPresentWhenUpdating(...)]`
+usages from [Model.cs](../../src/DB/Models/Model.cs) (`ModelWithDocument.Document`) and
+[AiPrompt.cs](../../src/DB/Models/AiPrompt.cs) (`JobPosting`, `Resume`, `AiPromptTemplate`,
+`PromptDocument`, `ResponseDocument`) — grepped the whole `src/DB/Models` directory first; no other
+usages existed.
+
+**Why:** An attribute-based check has the "forgotten annotation → silently unchecked" failure mode Martin
+originally flagged, and the attribute Backend had added enforced nothing (metadata only, no validator ever
+read it). Deriving the pairing from `ModelProperties`/`{PropertyName}Id` — data `CrudGeneratorInfo` already
+computes for every model via reflection — makes the check apply automatically to every current and future
+nested model property that follows the naming convention, with no per-property developer action required.
+
+**Consequence:** Adding a new `Model`-typed property with a matching `{PropertyName}Id` sibling gets this
+consistency check for free. A property that intentionally has no `{PropertyName}Id` sibling is automatically
+exempt — no attribute or exception list needed. Documented as a codebase invariant in
+`docs/CODING-STANDARDS.md` under "Nested model / foreign key id agreement (update and patch)".
+
+**Tests:** Added `tests/JobSearchAssistant.DB.Tests/Services/IdsMustMatchGroupValidationTests.cs` (5 tests):
+Update with matching ids passes, Update with mismatched ids fails with a clear error, Update with only the
+foreign key id provided passes, Patch with matching ids passes, Patch with mismatched ids fails. Full DB
+test project run: 65/65 passed. Server test project run (regression check after attribute removal): 27/27
+passed.
+
 ## Governance
 
 - Meaningful architectural changes require Lead review and affected-team input

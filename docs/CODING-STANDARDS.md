@@ -51,6 +51,7 @@ of the child object or the `{PropertyName}Id` foreign key may be supplied, and
 a supplied child object must be new — its `Id` must not be set.
 
 **ID Validation Rule:** All ID values (primary keys and foreign keys) must be greater than 0 if provided.
+
 - A child object must have `Id == 0` (new record) or `Id > 0` with no parent link attempt (error).
 - A foreign key ID of `0` means "not provided"; FK IDs in create mode must be `> 0` if using the FK path.
 - Negative ID values (`< 0`) are always invalid and rejected during validation.
@@ -105,6 +106,29 @@ PATCH /job-postings/7
 
 `7` and `3` must both be greater than 0; `PUT`/`PATCH /job-postings/0` or a
 nested `"id": -1` are rejected during validation before any database write.
+
+### Nested model / foreign key id agreement (update and patch)
+
+Every nested `Model`-typed property that has a sibling `{PropertyName}Id`
+property (for example `Document`/`DocumentId`, `JobPosting`/`JobPostingId`) is
+paired automatically by convention at CRUD registration time
+(`CrudInfoGeneration.GetIdsMustMatchGroups<T>`) — no attribute is needed. A
+missing `{PropertyName}Id` sibling is the natural opt-out: it means there is
+nothing to reconcile, not that a rule was forgotten. When updating or patching
+a record, if a nested child object with a non-zero `Id` and its paired foreign
+key id are both provided, they must agree; if only one is provided, there is
+nothing to check (the create-path table above already governs that case, and
+create itself forbids providing both). This is a codebase-wide invariant: a
+new `Model`-typed property automatically gets this check for free as long as
+it follows the `{PropertyName}Id` naming convention already used everywhere
+else.
+
+```json
+PATCH /resumes/7
+{ "documentId": 3, "document": { "id": 9, "title": "..." } }
+```
+
+The above is rejected — `document.id` (`9`) and `documentId` (`3`) disagree.
 
 ## HTTP and JSON
 

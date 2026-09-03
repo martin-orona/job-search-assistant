@@ -11,12 +11,10 @@ public class ValidationError
 
 public class RequiredWhenCreatingAttribute : ValidationAttribute
 {
-
 }
 
 public class RequiredWhenUpdatingAttribute : ValidationAttribute
 {
-
 }
 
 public class RequireOneWhenCreatingAttribute : ValidationAttribute

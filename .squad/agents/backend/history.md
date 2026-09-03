@@ -87,3 +87,5 @@ previous pass's unchecked assumption. Martin has since added `execute/*` tools t
 work, not a follow-up. Also: verify whether an attribute or constraint is in the *committed baseline*
 before reasoning about "previous behavior" — the `[Required]` attributes on `JobPosting` were part of
 this uncommitted change set, which is what made Failure A confusing. — recorded by Scribe
+
+📌 Team update (2026-09-02T00:00:00Z): Implemented convention-based IdsMustMatchGroup validation for Update/Patch per Lead's design; removed dead IdsMustMatchIfBothPresentWhenUpdatingAttribute; 5 new tests, DB.Tests 65/65 and Server.Tests 27/27 passing; docs/CODING-STANDARDS.md updated — decided by Backend.
