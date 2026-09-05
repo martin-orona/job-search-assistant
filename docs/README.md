@@ -198,3 +198,14 @@ AI Prompts:
 3. Add a "Copy to Clipboard" button to the left of the file path textbox. When pressed, the content from the extracted textbox will be copied to the clipboard.
 
 4. I want to be able to copy both the markdown text version and the formatted version of the job posting. Add a button labeled "Markdown to Clipboard". The "Markdown to Clipboard" button will copy the markdown text to the clipboard. The "Copy to Clipboard" button will copy the formatted text to the clipboard.
+
+## Tests
+
+Test cases are documented in [README.tests.md]().
+
+## Glossary
+
+| Term | Description |
+| :------------ | :----------- |
+| `JSA` | Job Search Assistant. |
+| `Job Search Assistant` | The product name. A tool that facilitates the process of assessing job postings, applying to jobs, and tracking status of job applications and interview processes. |

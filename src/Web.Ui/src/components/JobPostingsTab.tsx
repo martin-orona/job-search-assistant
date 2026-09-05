@@ -630,27 +630,28 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
   }
 
   return (
-    <section className="job-postings">
+    <section id="job-postings--container" className="job-postings">
       <h1>Job Postings</h1>
 
       <details
+        id="job-postings--capture--container"
         className="job-postings-expander"
         open={captureOpen}
         onToggle={(event) => setCaptureOpen(event.currentTarget.open)}
       >
         <summary>Capture</summary>
         <div className="job-postings-field">
-          <label htmlFor="job-post-url">Posting URL</label>
+          <label htmlFor="job-postings--capture--url">Posting URL</label>
           <div className="job-postings-input-row">
             <input
-              id="job-post-url"
+              id="job-postings--capture--url"
               type="url"
               value={urlInput}
               onChange={(event) => setUrlInput(event.target.value)}
               placeholder="https://example.com/job-posting"
             />
             <button
-              id="job-post-go-button"
+              id="job-postings--capture--go-button"
               className="button button--primary"
               type="button"
               onClick={handleGo}
@@ -658,6 +659,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
               Go
             </button>
             <button
+              id="job-postings--capture--capture-button"
               className="button"
               type="button"
               onClick={handleCapture}
@@ -665,6 +667,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
               Capture
             </button>
             <button
+              id="job-postings--capture--save-button"
               className="button"
               type="button"
               onClick={handleSave}
@@ -677,6 +680,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
         <p className="job-postings-status">{status}</p>
 
         <details
+          id="job-postings--job-post-page--container"
           className="job-postings-expander"
           open={jobPostPageOpen}
           onToggle={(event) => setJobPostPageOpen(event.currentTarget.open)}
@@ -684,7 +688,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
           <summary>Job Post Page</summary>
           <div className="job-postings-frame-wrap">
             <iframe
-              id="job-post-content"
+              id="job-postings--job-post-page--content"
               className="job-postings-frame"
               srcDoc={srcDoc}
               title="Job Post Page"
@@ -694,6 +698,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
         </details>
 
         <details
+          id="job-postings--formatted-content--container"
           className="job-postings-expander"
           open={formattedOpen}
           onToggle={(event) => setFormattedOpen(event.currentTarget.open)}
@@ -702,14 +707,16 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
           <div className="job-postings-toggle-row">
             <label className="job-postings-checkbox-label">
               <input
+                id="job-postings--formatted-content--remove-images-toggle"
                 type="checkbox"
                 checked={hideImages}
                 onChange={(e) => setHideImages(e.target.checked)}
               />
-              Hide images
+              Remove images
             </label>
             <label className="job-postings-checkbox-label">
               <input
+                id="job-postings--formatted-content--remove-buttons-toggle"
                 type="checkbox"
                 checked={hideButtons}
                 onChange={(e) => setHideButtons(e.target.checked)}
@@ -718,6 +725,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
             </label>
           </div>
           <div
+            id="job-postings--formatted-content--display"
             className={`job-postings-formatted${
               hideImages ? ' job-postings-formatted--no-images' : ''
             }${hideButtons ? ' job-postings-formatted--no-buttons' : ''}`}
@@ -726,12 +734,14 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
         </details>
 
         <details
+          id="job-postings--markdown-content--container"
           className="job-postings-expander"
           open={markdownOpen}
           onToggle={(event) => setMarkdownOpen(event.currentTarget.open)}
         >
           <summary>Markdown Content</summary>
           <textarea
+            id="job-postings--markdown-content--editor"
             className="job-postings-markdown"
             readOnly
             value={markdownContent || 'Capture a job posting to see markdown content here.'}
@@ -748,6 +758,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
         <summary className="job-postings-expander-summary">
           <span>Saved Job Postings</span>
           <button
+            id="job-postings--saved-job-postings--refresh-button"
             type="button"
             className="button expander-summary-button"
             aria-label="Refresh saved job postings"

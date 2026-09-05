@@ -169,6 +169,25 @@
         "reveal": "never",
         "panel": "shared"
       }
+    },
+    {
+      "label": "test Web.Ui",
+      "type": "shell",
+      "command": "pnpm",
+      "args": [
+        "--filter",
+        "web-ui-tests",
+        "test"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
     }
   ]
 }

@@ -1,0 +1,29 @@
+{
+  "name": "web-ui-tests",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "pnpm run test:edge",
+    "test:all": "playwright test",
+    "test:chrome": "playwright test --project=chromium",
+    "test:edge": "playwright test --project=edge",
+    "test:firefox": "playwright test --project=firefox",
+    "test:ui": "pnpm run test:ui:edge",
+    "test:ui:all": "playwright test --ui",
+    "test:ui:chrome": "playwright test --ui --project=chromium",
+    "test:ui:edge": "playwright test --ui --project=edge",
+    "test:ui:firefox": "playwright test --ui --project=firefox",
+    "test:headed": "pnpm run test:headed:edge",
+    "test:headed:all": "playwright test --headed",
+    "test:headed:chrome": "playwright test --headed --project=chromium",
+    "test:headed:edge": "playwright test --headed --project=edge",
+    "test:headed:firefox": "playwright test --headed --project=firefox"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^24.6.0",
+    "typescript": "^5.9.3"
+  }
+}

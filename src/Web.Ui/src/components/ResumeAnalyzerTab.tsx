@@ -641,31 +641,32 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
   }
 
   return (
-    <section className="resume-analyzer">
+    <section className="resume-analyzer" id="resume-analyzer--container">
       <h1>Resume Analyzer</h1>
 
       <div className="resume-analyzer-status">{status}</div>
 
-      <details className="resume-analyzer-expander ai-prompt-container" open={expanderState.aiPrompt} onToggle={(event) => setExpanderOpen('aiPrompt', event.currentTarget.open)}>
+      <details id="resume-analyzer--ai-prompt--container" className="resume-analyzer-expander ai-prompt-container" open={expanderState.aiPrompt} onToggle={(event) => setExpanderOpen('aiPrompt', event.currentTarget.open)}>
         <summary>AI Prompt</summary>
         <div className="resume-analyzer-body">
           <div className="resume-analyzer-actions-row">
-            <button type="button" className="button button--primary" onClick={() => void handlePromptAi()}>
+            <button id="resume-analyzer--ai-prompt--prompt-ai-button" type="button" className="button button--primary" onClick={() => void handlePromptAi()}>
               Prompt AI
             </button>
-            <button type="button" className="button" onClick={handleGeneratePrompt}>
+            <button id="resume-analyzer--ai-prompt--generate-prompt-button" type="button" className="button" onClick={handleGeneratePrompt}>
               Generate Prompt
             </button>
-            <button type="button" className="button" onClick={() => void handleCopyPrompt()}>
+            <button id="resume-analyzer--ai-prompt--copy-prompt-button" type="button" className="button" onClick={() => void handleCopyPrompt()}>
               Copy Prompt
             </button>
-            <button type="button" className="button" onClick={() => void handleOpenAi()}>
+            <button id="resume-analyzer--ai-prompt--open-ai-button" type="button" className="button" onClick={() => void handleOpenAi()}>
               Open AI
             </button>
-            <button type="button" className="button" onClick={() => void handleSaveAiPrompt()}>
+            <button id="resume-analyzer--ai-prompt--save-ai-prompt-button" type="button" className="button" onClick={() => void handleSaveAiPrompt()}>
               Save
             </button>
             <input
+              id="resume-analyzer--ai-prompt--ai-url"
               type="url"
               value={aiUrl}
               onChange={(event) => setAiUrl(event.target.value)}
@@ -674,30 +675,44 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
             />
           </div>
 
-          <details className="resume-analyzer-inner-expander ai-prompt-content" open={expanderState.aiPromptContent} onToggle={(event) => setExpanderOpen('aiPromptContent', event.currentTarget.open)}>
-            <summary>Content</summary>
-            <textarea
-              className="resume-analyzer-editor"
-              value={aiPromptContent}
-              onChange={(event) => setAiPromptContent(event.target.value)}
-              placeholder="Generated prompt will appear here..."
-              aria-label="AI Prompt content"
+          <div id="resume-analyzer--ai-prompt--editor--container" className="resume-analyzer-card">
+            <input
+              id="resume-analyzer--ai-prompt--editor--ai-url"
+              type="url"
+              value={aiUrl}
+              onChange={(event) => setAiUrl(event.target.value)}
+              placeholder="AI URL (e.g., https://chatgpt.com)"
+              aria-label="AI URL"
             />
-          </details>
 
-          <details className="resume-analyzer-inner-expander ai-response-content" open={expanderState.aiResponseContent} onToggle={(event) => setExpanderOpen('aiResponseContent', event.currentTarget.open)}>
-            <summary>AI Response</summary>
-            <textarea
-              className="resume-analyzer-editor"
-              value={aiResponseText}
-              onChange={(event) => setAiResponseText(event.target.value)}
-              placeholder="Captured AI response will appear here..."
-              aria-label="AI Response content"
-            />
-          </details>
+            <details id="resume-analyzer--ai-prompt--editor--prompt--container" className="resume-analyzer-inner-expander ai-prompt-content" open={expanderState.aiPromptContent} onToggle={(event) => setExpanderOpen('aiPromptContent', event.currentTarget.open)}>
+              <summary>Content</summary>
+              <textarea
+                id="resume-analyzer--ai-prompt--editor--ai-prompt-editor"
+                className="resume-analyzer-editor"
+                value={aiPromptContent}
+                onChange={(event) => setAiPromptContent(event.target.value)}
+                placeholder="Generated prompt will appear here..."
+                aria-label="AI Prompt content"
+              />
+            </details>
+
+            <details id="resume-analyzer--ai-prompt--editor--ai-response--container" className="resume-analyzer-inner-expander ai-response-content" open={expanderState.aiResponseContent} onToggle={(event) => setExpanderOpen('aiResponseContent', event.currentTarget.open)}>
+              <summary>AI Response</summary>
+              <textarea
+                id="resume-analyzer--ai-prompt--editor--ai-response--editor"
+                className="resume-analyzer-editor"
+                value={aiResponseText}
+                onChange={(event) => setAiResponseText(event.target.value)}
+                placeholder="Captured AI response will appear here..."
+                aria-label="AI Response content"
+              />
+            </details>
+
+          </div>
 
           <details
-            id="resume-analyzer--saved-ai-prompts--container"
+            id="resume-analyzer--ai-prompt--saved-ai-prompts--container"
             className="resume-analyzer-inner-expander saved-ai-prompts"
             open={expanderState.savedAiPrompts}
             onToggle={(event) => setExpanderOpen('savedAiPrompts', event.currentTarget.open)}
@@ -705,6 +720,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
             <summary>
               Saved AI Prompts
               <button
+                id="resume-analyzer--ai-prompt--saved-ai-prompts--refresh-button"
                 type="button"
                 className="button expander-summary-button"
                 aria-label="Refresh saved AI prompts"
@@ -722,8 +738,9 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
                 <p className="resume-analyzer-empty-state">No saved AI prompts yet.</p>
               ) : (
                 savedAiPrompts.map((savedAiPrompt) => (
-                  <div key={savedAiPrompt.id} className="resume-analyzer-saved-item saved-ai-prompt-container">
+                  <div key={savedAiPrompt.id} id={`resume-analyzer--saved-ai-prompt--container--${savedAiPrompt.id}`} className="resume-analyzer-saved-item saved-ai-prompt-container">
                     <details
+                      id={`resume-analyzer--saved-ai-prompt--details--${savedAiPrompt.id}`}
                       className="resume-analyzer-saved-resume saved-ai-prompt"
                       open={expanderState.savedAiPromptCards[savedAiPrompt.id] ?? false}
                       onToggle={(event) => {
@@ -743,6 +760,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
                         <span className="ai-prompt-resume-name">{savedAiPrompt.resumeName}</span>
                         <div className="card-actions">
                           <button
+                            id={`resume-analyzer--saved-ai-prompt--load-button--${savedAiPrompt.id}`}
                             type="button"
                             className="button"
                             onClick={() => {
@@ -755,6 +773,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
                             Load
                           </button>
                           <button
+                            id={`resume-analyzer--saved-ai-prompt--delete-button--${savedAiPrompt.id}`}
                             type="button"
                             className="button button--delete"
                             onClick={() => {
@@ -806,7 +825,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
         </div>
       </details>
 
-      <details className="resume-analyzer-expander" open={expanderState.jobDescription} onToggle={(event) => setExpanderOpen('jobDescription', event.currentTarget.open)}>
+      <details id="resume-analyzer--job-description--container" className="resume-analyzer-expander" open={expanderState.jobDescription} onToggle={(event) => setExpanderOpen('jobDescription', event.currentTarget.open)}>
         <summary>
           Job Description
           {!expanderState.jobDescription && jobPosting && (
@@ -818,9 +837,10 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
             <input type="text" value={jobPosting?.url ?? ''} readOnly placeholder="File path..." />
           </div>
 
-          <details className="resume-analyzer-inner-expander" open={expanderState.jobDescriptionContent} onToggle={(event) => setExpanderOpen('jobDescriptionContent', event.currentTarget.open)}>
+          <details id="resume-analyzer--job-description--content--container" className="resume-analyzer-inner-expander" open={expanderState.jobDescriptionContent} onToggle={(event) => setExpanderOpen('jobDescriptionContent', event.currentTarget.open)}>
             <summary>Content</summary>
             <textarea
+              id="resume-analyzer--job-description--content--editor"
               className="resume-analyzer-editor"
               readOnly
               value={jobPosting?.document?.content || 'Select a saved job posting to load its job description.'}
@@ -837,9 +857,10 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
           )}
         </summary>
         <div className="resume-analyzer-body">
-          <div className="resume-analyzer-card">
+          <div id="resume-analyzer--resume--editor" className="resume-analyzer-card">
             <div className="resume-analyzer-resume-primary-row">
               <input
+                id="resume-analyzer--resume--editor--name"
                 type="text"
                 value={resumeName}
                 onChange={(event) => setResumeName(event.target.value)}
@@ -847,6 +868,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
                 aria-label="Resume name"
               />
               <input
+                id="resume-analyzer--resume--editor--job-title"
                 type="text"
                 value={resumeJobTitle}
                 onChange={(event) => setResumeJobTitle(event.target.value)}
@@ -854,14 +876,17 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
                 aria-label="Resume job title"
               />
             </div>
+
             <div className="resume-analyzer-actions-row">
               <input
+                id="resume-analyzer--resume--editor--date"
                 type="date"
                 value={resumeDate}
                 onChange={(event) => setResumeDate(event.target.value)}
                 aria-label="Resume date"
               />
               <input
+                id="resume-analyzer--resume--editor--id"
                 type="number"
                 min="0"
                 value={resumeId}
@@ -870,6 +895,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
                 readOnly
               />
               <select
+                id="resume-analyzer--resume--editor--document-type"
                 value={resumeDocumentType}
                 onChange={(event) => setResumeDocumentType(event.target.value)}
                 aria-label="Resume document type"
@@ -879,8 +905,9 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
                   <option key={option} value={option}>{option}</option>
                 ))}
               </select>
-              <button type="button" className="button" onClick={() => void handleSaveResume()}>Save</button>
+              <button id="resume-analyzer--resume--editor--save-button" type="button" className="button" onClick={() => void handleSaveResume()}>Save</button>
               <button
+                id="resume-analyzer--resume--editor--new-button"
                 type="button"
                 className="button"
                 onClick={() => {
@@ -897,24 +924,27 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
               </button>
             </div>
 
+            <details
+              id="resume-analyzer--resume--editor--content--container"
+              className="resume-analyzer-inner-expander"
+              open={expanderState.resumeContent}
+              onToggle={(event) => setExpanderOpen('resumeContent', event.currentTarget.open)}
+            >
+              <summary>Content</summary>
+              <textarea
+                id="resume-analyzer--resume--editor--content--editor"
+                className="resume-analyzer-editor"
+                value={resumeContent}
+                onChange={(event) => setResumeContent(event.target.value)}
+                placeholder="Edit resume content..."
+                aria-label="Resume content"
+              />
+            </details>
+
           </div>
 
           <details
-            className="resume-analyzer-inner-expander"
-            open={expanderState.resumeContent}
-            onToggle={(event) => setExpanderOpen('resumeContent', event.currentTarget.open)}
-          >
-            <summary>Content</summary>
-            <textarea
-              className="resume-analyzer-editor"
-              value={resumeContent}
-              onChange={(event) => setResumeContent(event.target.value)}
-              placeholder="Edit resume content..."
-              aria-label="Resume content"
-            />
-          </details>
-
-          <details
+            id="resume-analyzer--saved-resumes--container"
             className="resume-analyzer-inner-expander"
             open={expanderState.savedResumes}
             onToggle={(event) => setExpanderOpen('savedResumes', event.currentTarget.open)}
@@ -922,6 +952,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
             <summary>
               Saved Resumes
               <button
+                id="resume-analyzer--saved-resumes--refresh-button"
                 type="button"
                 className="button expander-summary-button"
                 aria-label="Refresh saved resumes"
@@ -1007,37 +1038,43 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
           )}
         </summary>
         <div className="resume-analyzer-body">
-          <div className="resume-analyzer-actions-row">
-            <input
-              type="text"
-              value={templateName}
-              onChange={(event) => setTemplateName(event.target.value)}
-              placeholder="Template name..."
-              aria-label="Template name"
-            />
-            <button type="button" className="button" onClick={() => void handleSaveTemplate()}>Save</button>
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                setTemplateId('')
-                setTemplateName('')
-                setTemplateContent('')
-              }}
-            >
-              New
-            </button>
-          </div>
+          <div id="resume-analyzer--prompt-template--editor" className="resume-analyzer-card">
+            <div className="resume-analyzer-actions-row">
+              <input
+                id="resume-analyzer--prompt-template--editor--name"
+                type="text"
+                value={templateName}
+                onChange={(event) => setTemplateName(event.target.value)}
+                placeholder="Template name..."
+                aria-label="Template name"
+              />
+              <button id="resume-analyzer--prompt-template--editor--save-button" type="button" className="button" onClick={() => void handleSaveTemplate()}>Save</button>
+              <button
+                id="resume-analyzer--prompt-template--editor--new-button"
+                type="button"
+                className="button"
+                onClick={() => {
+                  setTemplateId('')
+                  setTemplateName('')
+                  setTemplateContent('')
+                }}
+              >
+                New
+              </button>
+            </div>
 
-          <details className="resume-analyzer-inner-expander" open={expanderState.promptTemplateContent} onToggle={(event) => setExpanderOpen('promptTemplateContent', event.currentTarget.open)}>
-            <summary>Content</summary>
-            <textarea
-              className="resume-analyzer-editor"
-              value={templateContent}
-              onChange={(event) => setTemplateContent(event.target.value)}
-              placeholder="Prompt template content..."
-            />
-          </details>
+            <details id="resume-analyzer--prompt-template--editor--content--container" className="resume-analyzer-inner-expander" open={expanderState.promptTemplateContent} onToggle={(event) => setExpanderOpen('promptTemplateContent', event.currentTarget.open)}>
+              <summary>Content</summary>
+              <textarea
+                id="resume-analyzer--prompt-template--editor--content--editor"
+                className="resume-analyzer-editor"
+                value={templateContent}
+                onChange={(event) => setTemplateContent(event.target.value)}
+                placeholder="Prompt template content..."
+              />
+            </details>
+
+          </div>
 
           <details
             id="resume-analyzer--saved-prompt-templates--container"
@@ -1048,6 +1085,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
             <summary>
               Saved Templates
               <button
+                id="resume-analyzer--saved-prompt-templates--refresh-button"
                 type="button"
                 className="button expander-summary-button"
                 aria-label="Refresh saved templates"

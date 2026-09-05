@@ -155,11 +155,21 @@ The above is rejected — `document.id` (`9`) and `documentId` (`3`) disagree.
 
 ## Tests
 
-- Put database tests under `tests/JobSearchAssistant.DB.Tests`.
+- Put database tests under `/tests/JobSearchAssistant.DB.Tests`.
+- Put web server tests under `/tests/JobSearchAssistant.Server.Tests`
+- Put end to end tests under `/tests/Web.Ui.Tests/e2e/`.
+
+### General
 - Follow the existing xUnit naming and fixture patterns.
 - Test both the public behavior and important storage details when persistence
   is involved.
+- Documentation is part of the behavior contract: a new test without a matching scenario is considered incomplete.
+- When adding or changing behavior tests, update the test documentation at the same time.
+- If the same test pattern is reused across multiple controls or components, prefer a Scenario Outline with Examples instead of repeating the same scenario.
+- Keep the scenario description in user terms and match the actual control IDs/selectors used by the implementation and automated tests.
 - Run the smallest relevant test filter first, then the full affected suite.
+
+### End to End (e2e)
 
 ## Documentation
 
