@@ -1,91 +1,82 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  onAutoCaptureTrigger,
-  requestCaptureByUrlFromExtension,
-  requestOpenUrlFromExtension,
-} from '../extensionBridge'
+import { useEffect, useMemo, useState } from "react";
+import { onAutoCaptureTrigger, requestCaptureByUrlFromExtension, requestOpenUrlFromExtension } from "../extensionBridge";
 
-const jobPostUrlStorageKey = 'job-post-url'
-const jobPostHideImagesStorageKey = 'job-post-hide-images'
-const jobPostHideButtonsStorageKey = 'job-post-hide-buttons'
-const jobPostCaptureOpenStorageKey = 'job-post-capture-open'
-const jobPostSavedOpenStorageKey = 'job-post-saved-open'
-const jobPostPageOpenStorageKey = 'job-post-page-open'
-const jobPostFormattedOpenStorageKey = 'job-post-formatted-open'
-const jobPostMarkdownOpenStorageKey = 'job-post-markdown-open'
+const jobPostUrlStorageKey = "job-post-url";
+const jobPostHideImagesStorageKey = "job-post-hide-images";
+const jobPostHideButtonsStorageKey = "job-post-hide-buttons";
+const jobPostCaptureOpenStorageKey = "job-post-capture-open";
+const jobPostSavedOpenStorageKey = "job-post-saved-open";
+const jobPostPageOpenStorageKey = "job-post-page-open";
+const jobPostFormattedOpenStorageKey = "job-post-formatted-open";
+const jobPostMarkdownOpenStorageKey = "job-post-markdown-open";
 
-type WorkModel = 'Unknown' | 'Remote' | 'InOffice' | 'Hybrid'
+type WorkModel = "Unknown" | "Remote" | "InOffice" | "Hybrid";
 
 type CapturedSnapshot = {
-  title?: string
-  url?: string
-  html?: string
-  text?: string
-}
+  title?: string;
+  url?: string;
+  html?: string;
+  text?: string;
+};
 
 type ExtractedJobPosting = {
-  source: string
-  title: string
-  company: string
-  location: string
-  salary: string
-  workModel: WorkModel
-  formattedHtml: string
-  markdown: string
-  fileName: string
-}
+  source: string;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  workModel: WorkModel;
+  formattedHtml: string;
+  markdown: string;
+  fileName: string;
+};
 
 type SaveJobPostingRequest = {
-  title: string
-  company: string
-  location: string
-  salary: string
-  workModel: WorkModel
-  url: string
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  workModel: WorkModel;
+  url: string;
   document: {
-    title: string
-    type: string
-    content: string
-    source: string | null
-  }
-}
+    title: string;
+    type: string;
+    content: string;
+    source: string | null;
+  };
+};
 
-type SaveJobPostingResponse = SavedJobPostingSummary
+type SaveJobPostingResponse = SavedJobPostingSummary;
 
 type SavedJobPostingSummary = {
-  id: number
-  title: string
-  company: string
-  location: string
-  salary: string
-  workModel: WorkModel
-  url: string
-  documentId: number
-  createdAt: string
+  id: number;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  workModel: WorkModel;
+  url: string;
+  documentId: number;
+  createdAt: string;
   document?: {
-    id: number
-    title: string
-    type: string
-    content: string
-    source: string | null
-  } | null
-}
+    id: number;
+    title: string;
+    type: string;
+    content: string;
+    source: string | null;
+  } | null;
+};
 
 function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
 function buildSrcDoc(title: string, url: string, html: string, text: string) {
   if (html) {
-    const baseTag = `<base href="${escapeHtml(url)}" />`
+    const baseTag = `<base href="${escapeHtml(url)}" />`;
 
-    if (html.includes('<head')) {
-      return html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`)
+    if (html.includes("<head")) {
+      return html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`);
     }
 
     return `<!doctype html>
@@ -94,7 +85,7 @@ function buildSrcDoc(title: string, url: string, html: string, text: string) {
     ${baseTag}
   </head>
   <body>${html}</body>
-</html>`
+</html>`;
   }
 
   return `<!doctype html>
@@ -111,163 +102,175 @@ function buildSrcDoc(title: string, url: string, html: string, text: string) {
   <body>
     <pre style="white-space: pre-wrap; font: 14px/1.4 system-ui, sans-serif; padding: 1rem; margin: 0;">${escapeHtml(text)}</pre>
   </body>
-</html>`
+</html>`;
 }
 
 function normalizeWhitespace(value: string) {
-  return value.replace(/\s+/g, ' ').trim()
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function firstNonEmpty(...values: Array<string | null | undefined>) {
-  return values.map((value) => value?.trim()).find((value) => Boolean(value)) ?? ''
+  return values.map((value) => value?.trim()).find((value) => Boolean(value)) ?? "";
 }
 
 function getLocalDateToken(date = new Date()) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}${month}${day}`
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
 }
 
 function sanitizeFileName(value: string) {
-  return normalizeWhitespace(value).replace(/[\\/:*?"<>|]/g, '-')
+  return normalizeWhitespace(value).replace(/[\\/:*?"<>|]/g, "-");
 }
 
 function extractTextLines(element: Element | null) {
-  return (element?.textContent ?? '')
+  return (element?.textContent ?? "")
     .split(/\r?\n/)
     .map((part) => part.trim())
-    .filter(Boolean)
+    .filter(Boolean);
 }
 
 function removeMatchingElements(root: Element, patterns: RegExp[]) {
-  const candidates = Array.from(root.querySelectorAll('*')).reverse()
+  const candidates = Array.from(root.querySelectorAll("*")).reverse();
 
   for (const element of candidates) {
-    const text = normalizeWhitespace(element.textContent ?? '')
+    const text = normalizeWhitespace(element.textContent ?? "");
     if (text && patterns.some((pattern) => pattern.test(text))) {
-      element.remove()
+      element.remove();
     }
   }
 }
 
 function extractSalaryText(...candidates: Array<string | null | undefined>) {
   for (const candidate of candidates) {
-    const text = normalizeWhitespace(candidate ?? '')
-    const match = text.match(
-      /\$[\d,]+(?:\.\d+)?(?:\s*(?:-|to)\s*\$?[\d,]+(?:\.\d+)?)?(?:\s*(?:a year|per year|\/year|yr|year))?/i,
-    )
+    const text = normalizeWhitespace(candidate ?? "");
+    const match = text.match(/\$[\d,]+(?:\.\d+)?(?:\s*(?:-|to)\s*\$?[\d,]+(?:\.\d+)?)?(?:\s*(?:a year|per year|\/year|yr|year))?/i);
 
     if (match) {
-      return match[0].replace(/\s+/g, ' ').trim()
+      return match[0].replace(/\s+/g, " ").trim();
     }
   }
 
-  return ''
+  return "";
 }
 
 function inferWorkModel(location: string, text: string): WorkModel {
-  const combined = `${location} ${text}`.toLowerCase()
+  const combined = `${location} ${text}`.toLowerCase();
 
   if (/\bhybrid\b|mixed|split time|split between remote and office/.test(combined)) {
-    return 'Hybrid'
+    return "Hybrid";
   }
 
   if (/\bremote\b|wfh|work from home|fully remote/.test(combined)) {
-    return 'Remote'
+    return "Remote";
   }
 
   if (/\bin[- ]?office\b|\bonsite\b|\bon[- ]?site\b|\boffice\b/.test(combined)) {
-    return 'InOffice'
+    return "InOffice";
   }
 
-  return combined.trim() ? 'InOffice' : 'Unknown'
+  return combined.trim() ? "InOffice" : "Unknown";
 }
 
 function formatWorkModelLabel(workModel: WorkModel) {
   switch (workModel) {
-    case 'Remote':
-      return 'Remote'
-    case 'InOffice':
-      return 'In Office'
-    case 'Hybrid':
-      return 'Hybrid'
+    case "Remote":
+      return "Remote";
+    case "InOffice":
+      return "In Office";
+    case "Hybrid":
+      return "Hybrid";
     default:
-      return 'Unknown'
+      return "Unknown";
   }
 }
 
 function formatSavedDate(value: string) {
-  const parsed = new Date(value)
+  const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    return value
+    return value;
   }
 
   return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 async function fetchSavedJobPostings() {
-  const response = await fetch('/api/v1/job-postings')
+  const response = await fetch("/api/v1/job-postings");
 
   if (!response.ok) {
-    throw new Error(await response.text() || 'Unable to load saved job postings.')
+    throw new Error((await response.text()) || "Unable to load saved job postings.");
   }
 
-  return (await response.json()) as SavedJobPostingSummary[]
+  return (await response.json()) as SavedJobPostingSummary[];
 }
 
 /** Convert a DOM element's content to Markdown (headings, lists, paragraphs). */
 function elementToMarkdown(el: Element | null): string {
-  if (!el) return ''
+  if (!el) return "";
 
   function nodeToMd(node: Node, depth = 0): string {
     if (node.nodeType === Node.TEXT_NODE) {
-      return node.textContent ?? ''
+      return node.textContent ?? "";
     }
 
-    if (node.nodeType !== Node.ELEMENT_NODE) return ''
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
 
-    const element = node as Element
-    const tag = element.tagName.toLowerCase()
-    const children = Array.from(element.childNodes).map((c) => nodeToMd(c, depth)).join('')
-    const trimmed = children.trim()
+    const element = node as Element;
+    const tag = element.tagName.toLowerCase();
+    const children = Array.from(element.childNodes)
+      .map((c) => nodeToMd(c, depth))
+      .join("");
+    const trimmed = children.trim();
 
     switch (tag) {
-      case 'h1': return `\n# ${trimmed}\n`
-      case 'h2': return `\n## ${trimmed}\n`
-      case 'h3': return `\n### ${trimmed}\n`
-      case 'h4': return `\n#### ${trimmed}\n`
-      case 'h5': return `\n##### ${trimmed}\n`
-      case 'h6': return `\n###### ${trimmed}\n`
-      case 'p': return trimmed ? `\n${trimmed}\n` : ''
-      case 'br': return '\n'
-      case 'li': return `\n- ${trimmed}`
-      case 'ul':
-      case 'ol': return `\n${trimmed}\n`
-      case 'strong':
-      case 'b': return trimmed ? `**${trimmed}**` : ''
-      case 'em':
-      case 'i': return trimmed ? `_${trimmed}_` : ''
-      case 'a': {
-        const href = element.getAttribute('href')
-        return href ? `[${trimmed}](${href})` : trimmed
+      case "h1":
+        return `\n# ${trimmed}\n`;
+      case "h2":
+        return `\n## ${trimmed}\n`;
+      case "h3":
+        return `\n### ${trimmed}\n`;
+      case "h4":
+        return `\n#### ${trimmed}\n`;
+      case "h5":
+        return `\n##### ${trimmed}\n`;
+      case "h6":
+        return `\n###### ${trimmed}\n`;
+      case "p":
+        return trimmed ? `\n${trimmed}\n` : "";
+      case "br":
+        return "\n";
+      case "li":
+        return `\n- ${trimmed}`;
+      case "ul":
+      case "ol":
+        return `\n${trimmed}\n`;
+      case "strong":
+      case "b":
+        return trimmed ? `**${trimmed}**` : "";
+      case "em":
+      case "i":
+        return trimmed ? `_${trimmed}_` : "";
+      case "a": {
+        const href = element.getAttribute("href");
+        return href ? `[${trimmed}](${href})` : trimmed;
       }
-      case 'script':
-      case 'style':
-      case 'noscript':
-        return ''
+      case "script":
+      case "style":
+      case "noscript":
+        return "";
       default:
-        return children
+        return children;
     }
   }
 
   return nodeToMd(el)
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function buildMarkdown(job: ExtractedJobPosting) {
@@ -276,52 +279,49 @@ function buildMarkdown(job: ExtractedJobPosting) {
 - Title: ${job.title}
 - Company: ${job.company}
 - Location: ${job.location}
-- Salary: ${job.salary || 'Unknown Salary'}
+- Salary: ${job.salary || "Unknown Salary"}
 - Work Model: ${formatWorkModelLabel(job.workModel)}
 - Source: ${job.source}
 - Captured: ${getLocalDateToken()}
 
 ## Job Description
 
-${job.markdown}`
+${job.markdown}`;
 }
 
 function extractIndeedJobPosting(snapshot: CapturedSnapshot): ExtractedJobPosting | null {
   if (!snapshot.html) {
-    return null
+    return null;
   }
 
-  const doc = new DOMParser().parseFromString(snapshot.html, 'text/html')
-  const root = doc.querySelector('.jobsearch-JobComponent') ?? doc.body
-  const header = root.querySelector('.jobsearch-InfoHeaderContainer') ?? root
-  const body =
-    root.querySelector('.jobsearch-BodyContainer') ??
-    root.querySelector('.jobsearch-JobComponent-description') ??
-    root
-  const description = root.querySelector('.jobsearch-JobComponent-description') ?? body
+  const doc = new DOMParser().parseFromString(snapshot.html, "text/html");
+  const root = doc.querySelector(".jobsearch-JobComponent") ?? doc.body;
+  const header = root.querySelector(".jobsearch-InfoHeaderContainer") ?? root;
+  const body = root.querySelector(".jobsearch-BodyContainer") ?? root.querySelector(".jobsearch-JobComponent-description") ?? root;
+  const description = root.querySelector(".jobsearch-JobComponent-description") ?? body;
 
   const title = firstNonEmpty(
-    header.querySelector('h1')?.textContent,
-    header.querySelector('h2')?.textContent,
+    header.querySelector("h1")?.textContent,
+    header.querySelector("h2")?.textContent,
     extractTextLines(header)[0],
     snapshot.title,
-  )
+  );
 
-  const headerLines = extractTextLines(header)
+  const headerLines = extractTextLines(header);
 
   const company = firstNonEmpty(
     header.querySelector('[data-testid*="company"]')?.textContent,
-    header.querySelector('a')?.textContent,
+    header.querySelector("a")?.textContent,
     headerLines[1],
-    'Unknown Company',
-  )
+    "Unknown Company",
+  );
 
   const location = firstNonEmpty(
     header.querySelector('[data-testid*="job-location"]')?.textContent,
     header.querySelector('[data-testid*="location"]')?.textContent,
     headerLines[2],
-    'Unknown Location',
-  )
+    "Unknown Location",
+  );
 
   const salary = firstNonEmpty(
     extractSalaryText(
@@ -331,27 +331,21 @@ function extractIndeedJobPosting(snapshot: CapturedSnapshot): ExtractedJobPostin
       body.textContent,
       snapshot.text,
     ),
-    'Unknown Salary',
-  )
+    "Unknown Salary",
+  );
 
-  removeMatchingElements(root, [
-    /^\d[\d,]*\s+reviews$/i,
-    /^read what people are saying about working here\.?$/i,
-  ])
+  removeMatchingElements(root, [/^\d[\d,]*\s+reviews$/i, /^read what people are saying about working here\.?$/i]);
 
-  const descriptionMarkdown = elementToMarkdown(description)
-  const descriptionText = descriptionMarkdown || normalizeWhitespace(
-    (description as HTMLElement | null)?.innerText ??
-      description?.textContent ??
-      snapshot.text ??
-      '',
-  )
-  const workModel = inferWorkModel(location, `${location} ${descriptionText}`)
-  const fileWorkMode = workModel.toLowerCase()
-  const fileName = `${sanitizeFileName(company)} - ${sanitizeFileName(title)} - ${getLocalDateToken()} - ${fileWorkMode}.md`
+  const descriptionMarkdown = elementToMarkdown(description);
+  const descriptionText =
+    descriptionMarkdown ||
+    normalizeWhitespace((description as HTMLElement | null)?.innerText ?? description?.textContent ?? snapshot.text ?? "");
+  const workModel = inferWorkModel(location, `${location} ${descriptionText}`);
+  const fileWorkMode = workModel.toLowerCase();
+  const fileName = `${sanitizeFileName(company)} - ${sanitizeFileName(title)} - ${getLocalDateToken()} - ${fileWorkMode}.md`;
 
   return {
-    source: snapshot.url ?? '',
+    source: snapshot.url ?? "",
     title,
     company,
     location,
@@ -359,222 +353,224 @@ function extractIndeedJobPosting(snapshot: CapturedSnapshot): ExtractedJobPostin
     workModel,
     fileName,
     formattedHtml: root.outerHTML,
-    markdown: descriptionText || 'No job description found.',
-  }
+    markdown: descriptionText || "No job description found.",
+  };
 }
 
 function extractGenericJobPosting(snapshot: CapturedSnapshot): ExtractedJobPosting {
-  const title = firstNonEmpty(snapshot.title, 'Job Posting')
-  const descriptionText = normalizeWhitespace(snapshot.text ?? '')
-  const workModel = inferWorkModel('Unknown Location', descriptionText)
-  const fileWorkMode = workModel.toLowerCase()
-  const fileName = `${sanitizeFileName('Unknown Company')} - ${sanitizeFileName(title)} - ${getLocalDateToken()} - ${fileWorkMode}.md`
+  const title = firstNonEmpty(snapshot.title, "Job Posting");
+  const descriptionText = normalizeWhitespace(snapshot.text ?? "");
+  const workModel = inferWorkModel("Unknown Location", descriptionText);
+  const fileWorkMode = workModel.toLowerCase();
+  const fileName = `${sanitizeFileName("Unknown Company")} - ${sanitizeFileName(title)} - ${getLocalDateToken()} - ${fileWorkMode}.md`;
 
   return {
-    source: snapshot.url ?? '',
-    company: 'Unknown Company',
+    source: snapshot.url ?? "",
+    company: "Unknown Company",
     title,
-    location: 'Unknown Location',
-    salary: 'Unknown Salary',
+    location: "Unknown Location",
+    salary: "Unknown Salary",
     workModel,
     fileName,
-    formattedHtml: snapshot.html ?? '',
-    markdown: descriptionText || 'No job description found.',
-  }
+    formattedHtml: snapshot.html ?? "",
+    markdown: descriptionText || "No job description found.",
+  };
 }
 
 function extractJobPosting(snapshot: CapturedSnapshot): ExtractedJobPosting {
   try {
-    const hostname = new URL(snapshot.url ?? '').hostname.toLowerCase()
-    if (hostname.includes('indeed.')) {
-      return extractIndeedJobPosting(snapshot) ?? extractGenericJobPosting(snapshot)
+    const hostname = new URL(snapshot.url ?? "").hostname.toLowerCase();
+    if (hostname.includes("indeed.")) {
+      return extractIndeedJobPosting(snapshot) ?? extractGenericJobPosting(snapshot);
     }
   } catch {
     // Fall back to generic extraction.
   }
 
-  return extractGenericJobPosting(snapshot)
+  return extractGenericJobPosting(snapshot);
 }
 
 type JobPostingsTabProps = {
-  onAnalyze: (jobPosting: SavedJobPostingSummary) => void
-}
+  onAnalyze: (jobPosting: SavedJobPostingSummary) => void;
+};
 
 export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
   const [urlInput, setUrlInput] = useState(() => {
-    return window.localStorage.getItem(jobPostUrlStorageKey) ?? ''
-  })
-  const [pageSnapshot, setPageSnapshot] = useState<CapturedSnapshot | null>(null)
-  const [formattedHtml, setFormattedHtml] = useState('')
-  const [markdownContent, setMarkdownContent] = useState('')
-  const [capturedJobPosting, setCapturedJobPosting] = useState<ExtractedJobPosting | null>(null)
-  const [savedJobPostings, setSavedJobPostings] = useState<SavedJobPostingSummary[]>([])
-  const [savedCardOpenState, setSavedCardOpenState] = useState<Record<number, boolean>>({})
+    return window.localStorage.getItem(jobPostUrlStorageKey) ?? "";
+  });
+  const [pageSnapshot, setPageSnapshot] = useState<CapturedSnapshot | null>(null);
+  const [formattedHtml, setFormattedHtml] = useState("");
+  const [markdownContent, setMarkdownContent] = useState("");
+  const [capturedJobPosting, setCapturedJobPosting] = useState<ExtractedJobPosting | null>(null);
+  const [savedJobPostings, setSavedJobPostings] = useState<SavedJobPostingSummary[]>([]);
+  const [savedCardOpenState, setSavedCardOpenState] = useState<Record<number, boolean>>({});
   const [hideImages, setHideImages] = useState(() => {
-    return window.localStorage.getItem(jobPostHideImagesStorageKey) === 'true'
-  })
+    return window.localStorage.getItem(jobPostHideImagesStorageKey) === "true";
+  });
   const [hideButtons, setHideButtons] = useState(() => {
-    return window.localStorage.getItem(jobPostHideButtonsStorageKey) === 'true'
-  })
+    return window.localStorage.getItem(jobPostHideButtonsStorageKey) === "true";
+  });
   const [captureOpen, setCaptureOpen] = useState(() => {
-    const stored = window.localStorage.getItem(jobPostCaptureOpenStorageKey)
-    return stored == null ? true : stored === 'true'
-  })
+    const stored = window.localStorage.getItem(jobPostCaptureOpenStorageKey);
+    return stored == null ? true : stored === "true";
+  });
   const [savedOpen, setSavedOpen] = useState(() => {
-    const stored = window.localStorage.getItem(jobPostSavedOpenStorageKey)
-    return stored == null ? false : stored === 'true'
-  })
+    const stored = window.localStorage.getItem(jobPostSavedOpenStorageKey);
+    return stored == null ? false : stored === "true";
+  });
   const [jobPostPageOpen, setJobPostPageOpen] = useState(() => {
-    const stored = window.localStorage.getItem(jobPostPageOpenStorageKey)
-    return stored == null ? true : stored === 'true'
-  })
+    const stored = window.localStorage.getItem(jobPostPageOpenStorageKey);
+    return stored == null ? true : stored === "true";
+  });
   const [formattedOpen, setFormattedOpen] = useState(() => {
-    const stored = window.localStorage.getItem(jobPostFormattedOpenStorageKey)
-    return stored == null ? false : stored === 'true'
-  })
+    const stored = window.localStorage.getItem(jobPostFormattedOpenStorageKey);
+    return stored == null ? false : stored === "true";
+  });
   const [markdownOpen, setMarkdownOpen] = useState(() => {
-    const stored = window.localStorage.getItem(jobPostMarkdownOpenStorageKey)
-    return stored == null ? false : stored === 'true'
-  })
-  const [status, setStatus] = useState('Enter a posting URL and click go.')
+    const stored = window.localStorage.getItem(jobPostMarkdownOpenStorageKey);
+    return stored == null ? false : stored === "true";
+  });
+  const [status, setStatus] = useState("Enter a posting URL and click go.");
 
-  const refreshSavedJobPostings = async () => {
+  const refreshSavedJobPostings = async (announce = false) => {
     try {
-      setSavedJobPostings(await fetchSavedJobPostings())
-      setStatus('Saved job postings refreshed.')
+      setSavedJobPostings(await fetchSavedJobPostings());
+      if (announce) {
+        setStatus("Saved job postings refreshed.");
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to load saved job postings.'
-      setStatus(`Unable to refresh saved job postings. (${message})`)
+      const message = error instanceof Error ? error.message : "Unable to load saved job postings.";
+      if (announce) {
+        setStatus(`Unable to refresh saved job postings. (${message})`);
+      }
     }
-  }
+  };
 
   useEffect(() => {
-    window.localStorage.setItem(jobPostUrlStorageKey, urlInput)
-  }, [urlInput])
+    window.localStorage.setItem(jobPostUrlStorageKey, urlInput);
+  }, [urlInput]);
 
   useEffect(() => {
-    window.localStorage.setItem(jobPostHideImagesStorageKey, String(hideImages))
-  }, [hideImages])
+    window.localStorage.setItem(jobPostHideImagesStorageKey, String(hideImages));
+  }, [hideImages]);
 
   useEffect(() => {
-    window.localStorage.setItem(jobPostHideButtonsStorageKey, String(hideButtons))
-  }, [hideButtons])
+    window.localStorage.setItem(jobPostHideButtonsStorageKey, String(hideButtons));
+  }, [hideButtons]);
 
   useEffect(() => {
-    window.localStorage.setItem(jobPostCaptureOpenStorageKey, String(captureOpen))
-  }, [captureOpen])
+    window.localStorage.setItem(jobPostCaptureOpenStorageKey, String(captureOpen));
+  }, [captureOpen]);
 
   useEffect(() => {
-    window.localStorage.setItem(jobPostSavedOpenStorageKey, String(savedOpen))
-  }, [savedOpen])
+    window.localStorage.setItem(jobPostSavedOpenStorageKey, String(savedOpen));
+  }, [savedOpen]);
 
   useEffect(() => {
-    window.localStorage.setItem(jobPostPageOpenStorageKey, String(jobPostPageOpen))
-  }, [jobPostPageOpen])
+    window.localStorage.setItem(jobPostPageOpenStorageKey, String(jobPostPageOpen));
+  }, [jobPostPageOpen]);
 
   useEffect(() => {
-    window.localStorage.setItem(jobPostFormattedOpenStorageKey, String(formattedOpen))
-  }, [formattedOpen])
+    window.localStorage.setItem(jobPostFormattedOpenStorageKey, String(formattedOpen));
+  }, [formattedOpen]);
 
   useEffect(() => {
-    window.localStorage.setItem(jobPostMarkdownOpenStorageKey, String(markdownOpen))
-  }, [markdownOpen])
+    window.localStorage.setItem(jobPostMarkdownOpenStorageKey, String(markdownOpen));
+  }, [markdownOpen]);
 
   useEffect(() => {
-    void refreshSavedJobPostings()
-  }, [])
+    void refreshSavedJobPostings(false);
+  }, []);
 
   const srcDoc = useMemo(() => {
     if (!pageSnapshot) {
-      return '<!doctype html><html><head><style>:root { color-scheme: light dark; } html, body { background: transparent; color: inherit; margin: 0; padding: 0; }</style></head><body></body></html>'
+      return "<!doctype html><html><head><style>:root { color-scheme: light dark; } html, body { background: transparent; color: inherit; margin: 0; padding: 0; }</style></head><body></body></html>";
     }
 
     return buildSrcDoc(
-      pageSnapshot.title ?? 'Job Post Page',
+      pageSnapshot.title ?? "Job Post Page",
       pageSnapshot.url ?? urlInput,
-      pageSnapshot.html ?? '',
-      pageSnapshot.text ?? '',
-    )
-  }, [pageSnapshot, urlInput])
+      pageSnapshot.html ?? "",
+      pageSnapshot.text ?? "",
+    );
+  }, [pageSnapshot, urlInput]);
 
   const handleGo = async () => {
-    const nextUrl = urlInput.trim()
-    setUrlInput(nextUrl)
+    const nextUrl = urlInput.trim();
+    setUrlInput(nextUrl);
 
     if (!nextUrl) {
-      setStatus('Enter a valid URL first.')
-      return
+      setStatus("Enter a valid URL first.");
+      return;
     }
 
-    setStatus('Opening the page in a visible tab...')
+    setStatus("Opening the page in a visible tab...");
 
     try {
-      const response = await requestOpenUrlFromExtension(nextUrl)
-      setPageSnapshot(null)
-      setCapturedJobPosting(null)
-      setFormattedHtml('')
-      setMarkdownContent('')
-      setStatus(
-        `Opened ${response.snapshot?.url ?? nextUrl}. Use capture after you finish with the page.`,
-      )
+      const response = await requestOpenUrlFromExtension(nextUrl);
+      setPageSnapshot(null);
+      setCapturedJobPosting(null);
+      setFormattedHtml("");
+      setMarkdownContent("");
+      setStatus(`Opened ${response.snapshot?.url ?? nextUrl}. Use capture after you finish with the page.`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Unable to open the page.')
+      setStatus(error instanceof Error ? error.message : "Unable to open the page.");
     }
-  }
+  };
 
   const handleCapture = async () => {
-    const targetUrl = urlInput.trim()
+    const targetUrl = urlInput.trim();
 
     if (!targetUrl) {
-      setStatus('Enter a posting URL first.')
-      return
+      setStatus("Enter a posting URL first.");
+      return;
     }
 
-    setStatus(`Looking for an open tab matching ${targetUrl}...`)
+    setStatus(`Looking for an open tab matching ${targetUrl}...`);
 
     try {
       const response = await requestCaptureByUrlFromExtension<{
-        title?: string
-        url?: string
-        html?: string
-        text?: string
-      }>(targetUrl)
-      const snapshot = response.snapshot ?? null
-      setPageSnapshot(snapshot)
+        title?: string;
+        url?: string;
+        html?: string;
+        text?: string;
+      }>(targetUrl);
+      const snapshot = response.snapshot ?? null;
+      setPageSnapshot(snapshot);
 
       if (!snapshot) {
-        setStatus('No page snapshot was returned.')
-        return
+        setStatus("No page snapshot was returned.");
+        return;
       }
 
-      const jobPosting = extractJobPosting(snapshot)
-      const markdown = buildMarkdown(jobPosting)
-      setCapturedJobPosting(jobPosting)
-      setFormattedHtml(jobPosting.formattedHtml)
-      setMarkdownContent(markdown)
-      setStatus(`Captured ${jobPosting.title}.`)
+      const jobPosting = extractJobPosting(snapshot);
+      const markdown = buildMarkdown(jobPosting);
+      setCapturedJobPosting(jobPosting);
+      setFormattedHtml(jobPosting.formattedHtml);
+      setMarkdownContent(markdown);
+      setStatus(`Captured ${jobPosting.title}.`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Unable to capture the page.')
+      setStatus(error instanceof Error ? error.message : "Unable to capture the page.");
     }
-  }
+  };
 
   useEffect(() => {
     return onAutoCaptureTrigger(() => {
-      void handleCapture()
-    })
-  })
+      void handleCapture();
+    });
+  });
 
   const handleSave = () => {
     if (!capturedJobPosting || !markdownContent) {
-      setStatus('Capture a job posting before saving.')
-      return
+      setStatus("Capture a job posting before saving.");
+      return;
     }
 
     void (async () => {
-      const response = await fetch('/api/v1/job-postings', {
-        method: 'POST',
+      const response = await fetch("/api/v1/job-postings", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           title: capturedJobPosting.title,
@@ -585,51 +581,51 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
           url: capturedJobPosting.source,
           document: {
             title: capturedJobPosting.title,
-            type: 'Markdown',
+            type: "Markdown",
             content: markdownContent,
             source: capturedJobPosting.source,
           },
         } satisfies SaveJobPostingRequest),
-      })
+      });
 
       if (!response.ok) {
-        throw new Error(await response.text() || 'Unable to save the job posting.')
+        throw new Error((await response.text()) || "Unable to save the job posting.");
       }
 
-      const saved = (await response.json()) as SaveJobPostingResponse
-      setSavedJobPostings(await fetchSavedJobPostings())
-      setStatus(`Saved ${saved.title} (${saved.company || 'Unknown company'}).`)
+      const saved = (await response.json()) as SaveJobPostingResponse;
+      setSavedJobPostings(await fetchSavedJobPostings());
+      setStatus(`Saved ${saved.title} (${saved.company || "Unknown company"}).`);
     })().catch((error) => {
-      setStatus(error instanceof Error ? error.message : 'Unable to save the job posting.')
-    })
-  }
+      setStatus(error instanceof Error ? error.message : "Unable to save the job posting.");
+    });
+  };
 
   const handleDeleteJobPosting = async (id: number) => {
-    const confirmed = window.confirm('Delete this saved job posting?')
+    const confirmed = window.confirm("Delete this saved job posting?");
     if (!confirmed) {
-      return
+      return;
     }
 
     try {
       const response = await fetch(`/api/v1/job-postings/${id}`, {
-        method: 'DELETE',
-      })
+        method: "DELETE",
+      });
 
       if (!response.ok) {
-        throw new Error(await response.text() || 'Unable to delete saved job posting.')
+        throw new Error((await response.text()) || "Unable to delete saved job posting.");
       }
 
-      setSavedJobPostings((current) => current.filter((posting) => posting.id !== id))
+      setSavedJobPostings((current) => current.filter((posting) => posting.id !== id));
       setSavedCardOpenState((current) => {
-        const next = { ...current }
-        delete next[id]
-        return next
-      })
-      setStatus('Job posting deleted.')
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setStatus("Job posting deleted.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Unable to delete saved job posting.')
+      setStatus(error instanceof Error ? error.message : "Unable to delete saved job posting.");
     }
-  }
+  };
 
   return (
     <section id="job-postings--container" className="job-postings">
@@ -652,28 +648,13 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
               onChange={(event) => setUrlInput(event.target.value)}
               placeholder="https://example.com/job-posting"
             />
-            <button
-              id="job-postings--capture--go-button"
-              className="button button--primary"
-              type="button"
-              onClick={handleGo}
-            >
+            <button id="job-postings--capture--go-button" className="button button--primary" type="button" onClick={handleGo}>
               Go
             </button>
-            <button
-              id="job-postings--capture--capture-button"
-              className="button"
-              type="button"
-              onClick={handleCapture}
-            >
+            <button id="job-postings--capture--capture-button" className="button" type="button" onClick={handleCapture}>
               Capture
             </button>
-            <button
-              id="job-postings--capture--save-button"
-              className="button"
-              type="button"
-              onClick={handleSave}
-            >
+            <button id="job-postings--capture--save-button" className="button" type="button" onClick={handleSave}>
               Save
             </button>
           </div>
@@ -729,9 +710,11 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
           <div
             id="job-postings--formatted-content--display"
             className={`job-postings-formatted${
-              hideImages ? ' job-postings-formatted--no-images' : ''
-            }${hideButtons ? ' job-postings-formatted--no-buttons' : ''}`}
-            dangerouslySetInnerHTML={{ __html: formattedHtml || '<p style="color:#888">Capture a job posting to see formatted content here.</p>' }}
+              hideImages ? " job-postings-formatted--no-images" : ""
+            }${hideButtons ? " job-postings-formatted--no-buttons" : ""}`}
+            dangerouslySetInnerHTML={{
+              __html: formattedHtml || '<p style="color:#888">Capture a job posting to see formatted content here.</p>',
+            }}
           />
         </details>
 
@@ -746,7 +729,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
             id="job-postings--markdown-content--editor"
             className="job-postings-markdown"
             readOnly
-            value={markdownContent || 'Capture a job posting to see markdown content here.'}
+            value={markdownContent || "Capture a job posting to see markdown content here."}
           />
         </details>
       </details>
@@ -765,9 +748,9 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
             className="button expander-summary-button"
             aria-label="Refresh saved job postings"
             onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void refreshSavedJobPostings()
+              event.preventDefault();
+              event.stopPropagation();
+              void refreshSavedJobPostings(true);
             }}
           >
             Refresh
@@ -778,7 +761,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
         ) : (
           <div className="job-postings-saved-list">
             {savedJobPostings.map((jobPosting) => {
-              const isSavedCardOpen = savedCardOpenState[jobPosting.id] ?? false
+              const isSavedCardOpen = savedCardOpenState[jobPosting.id] ?? false;
 
               return (
                 <div key={jobPosting.id} className="job-postings-saved-item">
@@ -794,12 +777,12 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
                       }))
                     }
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
                         setSavedCardOpenState((current) => ({
                           ...current,
                           [jobPosting.id]: !current[jobPosting.id],
-                        }))
+                        }));
                       }
                     }}
                   >
@@ -808,16 +791,16 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
                         jobPosting.company,
                         jobPosting.title,
                         formatWorkModelLabel(jobPosting.workModel),
-                        jobPosting.salary || 'Unknown Salary',
-                      ].join(' | ')}
+                        jobPosting.salary || "Unknown Salary",
+                      ].join(" | ")}
                     </span>
                     <div className="card-actions">
                       <button
                         type="button"
                         className="button"
                         onClick={(event) => {
-                          event.stopPropagation()
-                          onAnalyze(jobPosting)
+                          event.stopPropagation();
+                          onAnalyze(jobPosting);
                         }}
                       >
                         Analyze
@@ -826,8 +809,8 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
                         type="button"
                         className="button button--delete"
                         onClick={(event) => {
-                          event.stopPropagation()
-                          void handleDeleteJobPosting(jobPosting.id)
+                          event.stopPropagation();
+                          void handleDeleteJobPosting(jobPosting.id);
                         }}
                       >
                         Delete
@@ -837,7 +820,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
 
                   {isSavedCardOpen && (
                     <div className="job-postings-saved-details">
-                      <div>{jobPosting.salary || 'Unknown Salary'}</div>
+                      <div>{jobPosting.salary || "Unknown Salary"}</div>
                       <div>
                         {formatWorkModelLabel(jobPosting.workModel)} {jobPosting.location}
                       </div>
@@ -854,18 +837,17 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
                         <textarea
                           className="job-postings-markdown job-postings-saved-markdown"
                           readOnly
-                          value={jobPosting.document?.content || 'No markdown available for this posting.'}
+                          value={jobPosting.document?.content || "No markdown available for this posting."}
                         />
                       </details>
                     </div>
                   )}
                 </div>
-              )
+              );
             })}
           </div>
         )}
       </details>
-
     </section>
-  )
+  );
 }

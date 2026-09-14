@@ -1,5 +1,5 @@
 import { expect, Locator, Page, test, TestInfo } from "@playwright/test";
-import { callServer, cleanupDbViewerTestFlow, initiateDbViewerTestFlow } from "./helpers";
+import { callServer, cleanupDbViewerTestFlow, getTestHeaders, initiateDbViewerTestFlow } from "./helpers";
 
 namespace DbViewer {
   test.describe("Feature: DB Viewer", () => {
@@ -323,21 +323,356 @@ namespace DbViewer {
       await expect(page.locator("#db-viewer--job-postings--export-dialog")).toBeHidden();
     });
 
-    test("Scenario: Refresh failure for a DB Viewer tab is visible to the user", async ({ page }) => {
+    test("Scenario: Import assigns new IDs automatically and highlights the imported records", async ({ page }, testInfo) => {
+      const existingPosting = {
+        title: "Existing Engineer",
+        company: "Existing Co",
+        location: "Remote",
+        salary: "$130,000",
+        workModel: "Remote",
+        url: "https://example.com/job/existing",
+        document: {
+          title: "Existing Engineer",
+          type: "markdown",
+          content: "# Existing Engineer",
+          source: "https://example.com/job/existing",
+        },
+      };
+
+      const existingResponse = await callServer({
+        page,
+        testInfo,
+        route: "job-postings",
+        method: "POST",
+        data: existingPosting,
+      });
+      const existingId = Number(existingResponse.json.id);
+      expect(existingId > 0, "Seed record must be created before testing import ID handling.").toBeTruthy();
+
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
 
+      await page.locator("#db-viewer--job-postings--import-button").click();
+      await expect(page.locator("#db-viewer--job-postings--import-dialog")).toBeVisible();
+
+      await page.locator("#db-viewer--job-postings--import-file-input").setInputFiles({
+        name: "job-postings-conflict.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(
+          JSON.stringify({
+            generatedAt: "2026-09-14T00:00:00Z",
+            entity: "Job Posting",
+            records: [
+              {
+                id: existingId,
+                title: "Imported Engineer",
+                company: "Imported Co",
+                location: "Remote",
+                salary: "$120,000",
+                workModel: "Remote",
+                url: "https://example.com/job/99",
+                document: {
+                  id: 900,
+                  title: "Imported Engineer",
+                  type: "markdown",
+                  content: "# Imported Engineer",
+                  source: "https://example.com/job/99",
+                },
+              },
+            ],
+          }),
+        ),
+      });
+
+      await page.locator("#db-viewer--job-postings--import-confirm-button").click();
+
+      await expect
+        .poll(
+          async () => {
+            const response = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", {
+              headers: getTestHeaders(testInfo),
+            });
+            if (!(await response.ok())) {
+              return false;
+            }
+
+            const records = await response.json();
+            const imported = records.filter((record: any) => record.title === "Imported Engineer");
+            return imported.length > 0 && imported.every((record: any) => Number(record.id) !== existingId);
+          },
+          { timeout: 10000 },
+        )
+        .toBeTruthy();
+
+      const importedResponse = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", {
+        headers: getTestHeaders(testInfo),
+      });
+      const importedRecords = await importedResponse.json();
+      const importedRecord = importedRecords.find((record: any) => record.title === "Imported Engineer");
+      expect(importedRecord, "The real server should save the imported record with a new ID.").toBeTruthy();
+
+      const importedId = Number(importedRecord.id);
+      expect(importedId).not.toBe(existingId);
+      await expect(page.locator(`#db-viewer--job-postings--record-${importedId}`)).toBeVisible({ timeout: 5000 });
+      await expect(page.locator(`#db-viewer--job-postings--record-${importedId}`)).toHaveClass(/db-viewer-list-item--highlight/);
+    });
+
+    test("Scenario: Import confirmation persists the selected file data to the real server", async ({ page }, testInfo) => {
+      const flowHeaders = getTestHeaders(testInfo);
+      const seedPayload = {
+        title: "Server Seed Engineer",
+        company: "Seed Co",
+        location: "Remote",
+        salary: "$140,000",
+        workModel: "Remote",
+        url: "https://example.com/job/seed",
+        document: {
+          title: "Server Seed Engineer",
+          type: "markdown",
+          content: "# Server Seed Engineer",
+          source: "https://example.com/job/seed",
+        },
+      };
+
+      const seedResponse = await callServer({
+        page,
+        testInfo,
+        route: "job-postings",
+        method: "POST",
+        data: seedPayload,
+      });
+      expect(seedResponse.ok, "Seed record creation must succeed before import testing.").toBe(true);
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+
+      await page.locator("#db-viewer--job-postings--import-button").click();
+      await expect(page.locator("#db-viewer--job-postings--import-dialog")).toBeVisible();
+
+      await page.locator("#db-viewer--job-postings--import-file-input").setInputFiles({
+        name: "job-postings-import.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(
+          JSON.stringify({
+            generatedAt: "2026-09-14T00:00:00Z",
+            entity: "Job Posting",
+            records: [
+              {
+                id: 99,
+                title: "Imported Engineer",
+                company: "Imported Co",
+                location: "Remote",
+                salary: "$120,000",
+                workModel: "Remote",
+                url: "https://example.com/job/99",
+                document: {
+                  id: 900,
+                  title: "Imported Engineer",
+                  type: "markdown",
+                  content: "# Imported Engineer",
+                  source: "https://example.com/job/99",
+                },
+              },
+            ],
+          }),
+        ),
+      });
+
+      await page.locator("#db-viewer--job-postings--import-confirm-button").click();
+
+      await expect
+        .poll(
+          async () => {
+            const response = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", { headers: flowHeaders });
+            if (!(await response.ok())) {
+              return false;
+            }
+
+            const importedRecords = await response.json();
+            return importedRecords.some((record: any) => record.title === "Imported Engineer");
+          },
+          { timeout: 5000 },
+        )
+        .toBeTruthy();
+
+      const importedResponse = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", {
+        headers: flowHeaders,
+      });
+      const importedRecords = await importedResponse.json();
+      const importedRecord = importedRecords.find((record: any) => record.title === "Imported Engineer");
+      expect(importedRecord, "The real server should save the imported record.").toBeTruthy();
+
+      const importedId = Number(importedRecord.id);
+      await expect(page.locator(`#db-viewer--job-postings--record-${importedId}`)).toBeVisible({ timeout: 5000 });
+      await expect(page.locator(`#db-viewer--job-postings--record-${importedId}`)).toHaveClass(/db-viewer-list-item--highlight/);
+    });
+
+    test("Scenario: Importing an AI Prompt with nested job, resume, and template references succeeds", async ({ page }, testInfo) => {
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+
+      await page.locator("#db-viewer--ai-prompts--import-button").click();
+      await expect(page.locator("#db-viewer--ai-prompts--import-dialog")).toBeVisible();
+
+      await page.locator("#db-viewer--ai-prompts--import-file-input").setInputFiles({
+        name: "ai-prompt-export.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(
+          JSON.stringify({
+            generatedAt: "2026-09-14T17:35:24.819Z",
+            entity: "AI Prompt",
+            records: [
+              {
+                name: "asdf vs Senior Software Engineer",
+                aiUrl: "https://copilot.microsoft.com/",
+                jobPosting: {
+                  title: "Senior Software Engineer",
+                  company: "Acme Corp",
+                  location: "Remote",
+                  salary: "$150,000 - $180,000 a year",
+                  url: "https://www.indeed.com/viewjob?jk=455de5af61ae4e7a",
+                  workModel: "Remote",
+                  document: {
+                    title: "Senior Software Engineer",
+                    type: "Markdown",
+                    content: "# Senior Software Engineer",
+                    source: "https://www.indeed.com/viewjob?jk=455de5af61ae4e7a",
+                    id: 4,
+                  },
+                  documentId: 4,
+                  id: 2,
+                },
+                jobPostingId: 2,
+                resume: {
+                  name: "asdf",
+                  jobTitle: "wefzxc asdf yuio",
+                  date: "2026-09-13T00:00:00-07:00",
+                  document: {
+                    title: "wefzxc asdf yuio",
+                    type: "Markdown",
+                    content: "# resume me\nto be or not to be",
+                    id: 2,
+                  },
+                  documentId: 2,
+                  id: 1,
+                },
+                resumeId: 1,
+                aiPromptTemplate: {
+                  name: "Resume Job Fit Analysis",
+                  document: {
+                    title: "Resume Job Fit Analysis",
+                    type: "Markdown",
+                    content: "I want a structured job-fit assessment.",
+                    id: 1,
+                  },
+                  documentId: 1,
+                  id: 1,
+                },
+                aiPromptTemplateId: 1,
+                promptDocument: {
+                  title: "asdf vs Senior Software Engineer prompt",
+                  type: "Markdown",
+                  content: "Prompt content",
+                  id: 6,
+                },
+                promptDocumentId: 6,
+                responseDocument: {
+                  title: "asdf vs Senior Software Engineer response",
+                  type: "Markdown",
+                  content: "Response content",
+                  id: 7,
+                },
+                responseDocumentId: 7,
+                id: 1,
+              },
+            ],
+          }),
+        ),
+      });
+
+      const importedAiPromptName = "asdf vs Senior Software Engineer";
+      const importedRecordRow = page.locator("#db-viewer--ai-prompts--list li").filter({ hasText: importedAiPromptName }).first();
+      const highlightAdded = page.waitForFunction(
+        (name) => {
+          const row = Array.from(document.querySelectorAll("#db-viewer--ai-prompts--list li")).find((item) =>
+            item.textContent?.includes(name),
+          );
+          return !!row && row.classList.contains("db-viewer-list-item--highlight");
+        },
+        importedAiPromptName,
+        { timeout: 5000 },
+      );
+
+      await page.locator("#db-viewer--ai-prompts--import-confirm-button").click();
+
+      await expect
+        .poll(
+          async () => {
+            const response = await page.request.get("http://localhost:5000/api/v1/ai-prompts?deep=true", {
+              headers: getTestHeaders(testInfo),
+            });
+            if (!(await response.ok())) {
+              return false;
+            }
+
+            const records = await response.json();
+            return records.some((record: any) => record.name === importedAiPromptName);
+          },
+          { timeout: 10000 },
+        )
+        .toBeTruthy();
+
+      const importedResponse = await page.request.get("http://localhost:5000/api/v1/ai-prompts?deep=true", {
+        headers: getTestHeaders(testInfo),
+      });
+      const importedRecords = await importedResponse.json();
+      const importedRecord = importedRecords.find((record: any) => record.name === importedAiPromptName);
+      expect(importedRecord, "The imported AI Prompt should be persisted to the real server.").toBeTruthy();
+      expect(Number(importedRecord.id)).toBeGreaterThan(0);
+
+      await expect(importedRecordRow).toBeVisible({ timeout: 5000 });
+      await highlightAdded;
+
+      await page.waitForFunction(
+        (name) => {
+          const row = Array.from(document.querySelectorAll("#db-viewer--ai-prompts--list li")).find((item) =>
+            item.textContent?.includes(name),
+          );
+          return !!row && !row.classList.contains("db-viewer-list-item--highlight");
+        },
+        importedAiPromptName,
+        { timeout: 5000 },
+      );
+    });
+
+    test("Scenario: Refresh failure for a DB Viewer tab is visible to the user", async ({ page }) => {
+      let shouldFailJobPostingRefresh = false;
+
       await page.route("**/api/v1/job-postings**", async (route) => {
-        if (route.request().method() === "GET") {
+        const req = route.request();
+
+        if (req.method() === "GET" && shouldFailJobPostingRefresh && req.url().includes("/api/v1/job-postings")) {
           await route.fulfill({
             status: 500,
             contentType: "text/plain",
             body: "Job posting refresh failed",
           });
+          return;
         }
+
+        await route.continue();
       });
 
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+
+      shouldFailJobPostingRefresh = true;
+      const refreshRequest = page.waitForRequest(
+        (request) => request.method() === "GET" && request.url().includes("/api/v1/job-postings") && request.url().includes("deep=true"),
+      );
+
       await page.locator("#db-viewer--job-postings--refresh-button").click();
+      await refreshRequest;
 
       await expect(page.locator("#db-viewer--job-postings--refresh-status")).toContainText(
         "Unable to refresh job postings. (500: Job posting refresh failed)",

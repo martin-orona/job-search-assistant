@@ -6,3 +6,15 @@ Before changing this repository, read and follow the project standards in
 The standards document defines the required coding conventions, architecture
 patterns, persistence rules, testing expectations, and documentation practices
 for this project.
+
+## Critical test rule for AI agents
+
+When writing or fixing UI and end-to-end tests, do not assert against unrelated
+async state changes or transient status updates. A test must wait for the exact
+browser event, network response, or DOM condition that proves the behavior under
+test. Do not write assertions that race against mount-time refreshes,
+animations, or background updates that can overwrite the same UI element.
+
+If a status message is transient, assert the lifecycle or the correct post-action
+state after the relevant user flow, not the stale message that appears from an
+unrelated refresh.

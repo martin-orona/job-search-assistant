@@ -181,6 +181,23 @@ The JSA has the ability to export records in a structured format.
 
     Then the selection list disappears
 
+### Scenario: Database management - data import
+
+The JSA has the ability to import data, in the same data format as the export format.
+
+    Given the User is on the DB Viewer tab
+
+    When the User presses the Import button, to the right of the Export button
+
+    Then the JSA presents the user with a file selection dialog
+
+    And When the user selects a file to import
+    And presses the confirmation button
+
+    Then JSA imports the file's data
+    And the imported records are assigned new database-generated IDs
+    And the User sees a list that highlights the imported records
+
 </details>
 
 ## Feature: Job Postings

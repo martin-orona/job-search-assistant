@@ -176,6 +176,9 @@ The above is rejected — `document.id` (`9`) and `documentId` (`3`) disagree.
 - At startup, delete any leftover databases matching the test prefix so failed or interrupted runs do not pollute the next suite.
 - Only test databases that match a safe prefix, e.g. `jsa_test_`, are eligible for creation or deletion. The real production database must never be targeted by this path.
 - The test middleware should be behind an explicit test/dev guard so production traffic never triggers database creation or teardown.
+- Do not write race-prone UI tests that assert against unrelated async state changes. A test must wait for the specific browser event or condition that proves the behavior under test; do not assert a final status text while a mount-time refresh, animation, or background update can overwrite it.
+- When a UI state is intentionally transient, assert the lifecycle (for example, add then remove a highlight or class) instead of the final state after the animation has already completed.
+- If a component updates status in several places, the test must account for those side effects explicitly or avoid asserting the stale one altogether.
 
 ## Documentation
 

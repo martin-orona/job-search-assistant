@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { cleanupDbViewerTestFlow, generateExpanderStateTests, generateInputStateTests, initiateDbViewerTestFlow } from "./helpers";
+import {
+  callServer,
+  cleanupDbViewerTestFlow,
+  generateExpanderStateTests,
+  generateInputStateTests,
+  initiateDbViewerTestFlow,
+} from "./helpers";
 
 test.describe("Feature: Job Postings", () => {
   test.beforeEach(async ({ page, context, browser, request }, testInfo) => {
@@ -38,16 +44,30 @@ test.describe("Feature: Job Postings", () => {
       ))();
   });
 
-  test("Scenario: Navigate to a job posting", async ({ page, context }) => {
-    const jobPostingUrl = "https://www.indeed.com/viewjob?jk=455de5af61ae4e7a";
+  test("Scenario: Navigate to a job posting", async ({ page, context }, testInfo) => {
+    const jobPostingUrl = "https://example.com/jobs/seeded-job-posting";
 
-    await page.route("**/api/v1/job-postings", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      });
+    const seedResponse = await callServer({
+      page,
+      testInfo,
+      route: "job-postings",
+      method: "POST",
+      data: {
+        title: "Seeded Job Posting",
+        company: "Contoso",
+        location: "Remote",
+        salary: "$150,000",
+        workModel: "Remote",
+        url: jobPostingUrl,
+        document: {
+          title: "Seeded Job Posting",
+          type: "markdown",
+          content: "# Seeded Job Posting",
+          source: jobPostingUrl,
+        },
+      },
     });
+    expect(seedResponse.ok, "The seeded job posting must be created before navigating to it.").toBeTruthy();
 
     // Mock the browser extension bridge to handle OPEN_URL_VISIBLE by opening a tab
     await page.addInitScript(() => {
@@ -80,17 +100,24 @@ test.describe("Feature: Job Postings", () => {
     await urlInput.fill(jobPostingUrl);
 
     // And clicks on the Go button
-    const [newPage] = await Promise.all([context.waitForEvent("page"), page.getByRole("button", { name: "Go", exact: true }).click()]);
+    const popupPromise = page.waitForEvent("popup");
+    await page.getByRole("button", { name: "Go", exact: true }).click();
+    const newPage = await popupPromise;
 
     // Then the browser will open a new tab to the job posting URL
-    expect(newPage.url()).toBe(jobPostingUrl);
+    await expect.poll(() => newPage.url()).toBe(jobPostingUrl);
 
     // And the focus will be placed on the new tab so that the user can see the job posting
     await newPage.bringToFront();
-    expect(newPage).toBeTruthy();
+    await expect.poll(() => newPage.evaluate(() => document.visibilityState)).toBe("visible");
 
-    // And the JSA UI displays the opened status
-    await expect(page.locator(".job-postings-status")).toContainText(`Opened ${jobPostingUrl}`);
+    // When the user switches back to the JSA tab, the status indicates the page was opened.
+    await page.bringToFront();
+    await expect
+      .poll(async () => await page.locator(".job-postings-status").textContent(), {
+        timeout: 10000,
+      })
+      .toContain(`Opened ${jobPostingUrl}`);
   });
 
   test("Scenario: Capture a job posting", async ({ page, context }) => {
@@ -178,7 +205,9 @@ test.describe("Feature: Job Postings", () => {
     const urlInput = page.getByLabel("Posting URL");
     await urlInput.fill(jobPostingUrl);
 
-    const [newPage] = await Promise.all([context.waitForEvent("page"), page.getByRole("button", { name: "Go", exact: true }).click()]);
+    const popupPromise = page.waitForEvent("popup");
+    await page.getByRole("button", { name: "Go", exact: true }).click();
+    const newPage = await popupPromise;
     expect(newPage.url()).toBe(jobPostingUrl);
     await expect(page.locator(".job-postings-status")).toContainText(`Opened ${jobPostingUrl}`);
 
@@ -273,7 +302,9 @@ test.describe("Feature: Job Postings", () => {
     const urlInput = page.getByLabel("Posting URL");
     await urlInput.fill(jobPostingUrl);
 
-    const [newPage] = await Promise.all([context.waitForEvent("page"), page.getByRole("button", { name: "Go", exact: true }).click()]);
+    const popupPromise = page.waitForEvent("popup");
+    await page.getByRole("button", { name: "Go", exact: true }).click();
+    const newPage = await popupPromise;
     expect(newPage.url()).toBe(jobPostingUrl);
 
     await page.getByRole("button", { name: "Capture", exact: true }).click();

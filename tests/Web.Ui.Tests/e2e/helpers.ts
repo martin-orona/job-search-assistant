@@ -215,7 +215,7 @@ export async function cleanupDbViewerTestFlow(page: any, testInfo: TestInfo) {
   });
 }
 
-function getTestHeaders(testInfo: TestInfo) {
+export function getTestHeaders(testInfo: TestInfo) {
   const testPath = testInfo.titlePath.join(" > ");
   const testTitle = testPath
     .replace(/[^a-z0-9]+/gi, "-")
@@ -227,11 +227,18 @@ function getTestHeaders(testInfo: TestInfo) {
     .replace(/^-+|-+$/g, "")
     .replace(/-+/g, "-")
     .toLowerCase();
-  const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const flowId = `${projectName}-${testTitle}-${uniqueSuffix}`;
-  const cappedFlowId = flowId.length > 80 ? `${flowId.slice(0, 70)}-${Math.random().toString(36).slice(2, 8)}` : flowId;
+
+  const cacheKey = `${projectName}:${testTitle}`;
+  const globalCache = (globalThis as typeof globalThis & { __jsaTestFlowHeaders?: Map<string, string> }).__jsaTestFlowHeaders ??= new Map<string, string>();
+  if (!globalCache.has(cacheKey)) {
+    const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const flowId = `${projectName}-${testTitle}-${uniqueSuffix}`;
+    const cappedFlowId = flowId.length > 80 ? `${flowId.slice(0, 70)}-${Math.random().toString(36).slice(2, 8)}` : flowId;
+    globalCache.set(cacheKey, cappedFlowId);
+  }
+
   return {
-    "X-JSA-Test-Flow": cappedFlowId,
+    "X-JSA-Test-Flow": globalCache.get(cacheKey)!,
   };
 }
 
