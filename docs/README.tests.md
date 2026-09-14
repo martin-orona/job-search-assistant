@@ -137,6 +137,17 @@ The various UI components that have state, remember it so that the next time the
     | Resume Analyzer | #resume-analyzer--resume--editor--content--editor |
     | Resume Analyzer | #resume-analyzer--prompt-template--editor--name |
 
+### Scenario: Database management - daily backups
+
+The JSA has a simple strategy to be able to restore the database to an earlier point in time. It maintains a daily backup per day that the JSA runs.
+
+    Given the user uses the JSA
+
+    When the API Server shuts down
+
+    Then it makes a backup copy in the Cloud Backup Database Directory with a timestamp at the end of the file name, to make each backup unique
+    And only one daily backup is maintained, the latest daily backup of the day
+
 </details>
 
 ## Feature: Job Postings

@@ -1,6 +1,7 @@
 namespace JobSearchAssistant.DB;
 
 using System.Collections.Concurrent;
+using System.Globalization;
 
 using Microsoft.Data.Sqlite;
 
@@ -162,6 +163,50 @@ public static class FileLifecycleManager
         }
     }
 
+    public static string CreateDailyBackupSnapshot(DateTime? timestampUtc = null)
+    {
+        if (!File.Exists(LocalDbPath))
+        {
+            throw new FileNotFoundException("The database has not been created locally yet.", LocalDbPath);
+        }
+
+        Directory.CreateDirectory(CloudFolder);
+
+        var snapshotTime = timestampUtc ?? DateTime.UtcNow;
+        var snapshotName = $"{DbFileName}.{snapshotTime:yyyy-MM-ddTHH-mm-ssZ}";
+        var snapshotPath = Path.Combine(CloudFolder, snapshotName);
+        var backupPrefix = DbFileName + ".";
+
+        foreach (var existingBackup in Directory.EnumerateFiles(CloudFolder, "*.*", SearchOption.TopDirectoryOnly))
+        {
+            var existingName = Path.GetFileName(existingBackup);
+            if (string.IsNullOrWhiteSpace(existingName) || !existingName.StartsWith(backupPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var datePortion = existingName[backupPrefix.Length..];
+            if (!DateTime.TryParseExact(datePortion, "yyyy-MM-ddTHH-mm-ssZ", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var existingTimestamp))
+            {
+                continue;
+            }
+
+            if (existingTimestamp.Date == snapshotTime.Date)
+            {
+                if (string.Equals(existingBackup, snapshotPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                // Delete any existing backup for the same day to keep only the latest one being created
+                File.Delete(existingBackup);
+            }
+        }
+
+        File.Copy(LocalDbPath, snapshotPath, overwrite: true);
+        return snapshotPath;
+    }
+
     public static void SyncToCloud()
     {
         if (!string.IsNullOrWhiteSpace(ActiveTestFlowId))
@@ -180,6 +225,7 @@ public static class FileLifecycleManager
             Console.WriteLine("[Sync] Application exiting. Safely pushing database snapshot to OneDrive...");
             Directory.CreateDirectory(CloudFolder);
             File.Copy(LocalDbPath, CloudDbPath, overwrite: true);
+            CreateDailyBackupSnapshot();
             Console.WriteLine("[Sync] OneDrive backup successful.");
         }
         catch (Exception ex)
