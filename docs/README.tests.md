@@ -396,3 +396,21 @@ There are various entities that the JSA tracks. Each of them is visible in the D
     | AI Prompts |
 
 </details>
+
+### Scenario: Daily backups
+
+    Given the User is on the DB Viewer tab
+    And the User sees the DB Backups expander section
+
+    When the User expands DB Backups section
+
+    Then the User can see a list of the database's daily backups
+    And a Create Snapshot button, to the left of the Refresh button
+
+    And When the User presses the Create Snapshot button
+
+    Then the JSA creates a new daily snapshot of the database
+
+    NOTE: Not yet, but for future features:
+    1. Load a backup to view the content in it
+    2. Restore a backup to overwrite the current database

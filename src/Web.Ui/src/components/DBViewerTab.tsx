@@ -200,6 +200,7 @@ function DBViewerTab() {
   const [resumes, setResumes] = useState<SavedResume[]>([]);
   const [aiPromptTemplates, setAiPromptTemplates] = useState<SavedPromptTemplate[]>([]);
   const [aiPrompts, setAiPrompts] = useState<SavedAiPrompt[]>([]);
+  const [snapshotFiles, setSnapshotFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState<Record<EntityKey, boolean>>({
     "job-postings": true,
     resumes: true,
@@ -224,6 +225,9 @@ function DBViewerTab() {
     "ai-prompt-templates": false,
     "ai-prompts": false,
   });
+  const [dbBackupsExpanded, setDbBackupsExpanded] = useState(false);
+  const [dbBackupsLoading, setDbBackupsLoading] = useState(false);
+  const [dbBackupsError, setDbBackupsError] = useState("");
   const [error, setError] = useState("");
   const hasInitialLoadRef = useRef(false);
 
@@ -266,6 +270,20 @@ function DBViewerTab() {
     }
   }
 
+  async function loadDbBackups() {
+    try {
+      setDbBackupsLoading(true);
+      setDbBackupsError("");
+      const data = await loadJson<string[]>("/api/v1/admin/db-backups");
+      setSnapshotFiles(data);
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Unable to load daily backups.";
+      setDbBackupsError(`Unable to load DB backups. (${message})`);
+    } finally {
+      setDbBackupsLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (hasInitialLoadRef.current) {
       return;
@@ -277,6 +295,7 @@ function DBViewerTab() {
       loadEntity<SavedResume>("resumes", "/api/v1/resumes/?deep=true", setResumes),
       loadEntity<SavedPromptTemplate>("ai-prompt-templates", "/api/v1/ai-prompt-templates/?deep=true", setAiPromptTemplates),
       loadEntity<SavedAiPrompt>("ai-prompts", "/api/v1/ai-prompts/?deep=true", setAiPrompts),
+      loadDbBackups(),
     ]);
   }, []);
 
@@ -690,6 +709,88 @@ function DBViewerTab() {
       <h1>DB Viewer</h1>
 
       {error ? <p className="db-viewer-status">{error}</p> : null}
+
+      <details
+        id="db-viewer--db-backups--container"
+        className="db-viewer-entity"
+        open={dbBackupsExpanded}
+        onToggle={(event) => setDbBackupsExpanded(event.currentTarget.open)}
+      >
+        <summary id="db-viewer--db-backups--summary" className="db-viewer-entity-summary">
+          <span>DB Backups</span>
+
+          <div className="db-viewer-entity-actions">
+            <span id="db-viewer--db-backups--count" className="db-viewer-entity-count">
+              {dbBackupsLoading ? "Loading…" : `${snapshotFiles.length} saved`}
+            </span>
+            <button
+              id="db-viewer--db-backups--create-snapshot-button"
+              type="button"
+              className="button button--primary"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void (async () => {
+                  try {
+                    setDbBackupsLoading(true);
+                    setDbBackupsError("");
+                    const response = await fetch("/api/v1/admin/db-snapshot", { method: "GET" });
+                    if (!response.ok) {
+                      const detail = (await response.text()).trim();
+                      throw new Error(`${response.status}: ${detail || "No server details provided."}`);
+                    }
+
+                    await loadDbBackups();
+                  } catch (createError) {
+                    const message = createError instanceof Error ? createError.message : "Unable to create a database snapshot.";
+                    setDbBackupsError(`Unable to create snapshot. (${message})`);
+                  } finally {
+                    setDbBackupsLoading(false);
+                  }
+                })();
+              }}
+            >
+              Create Snapshot
+            </button>
+            <button
+              id="db-viewer--db-backups--refresh-button"
+              type="button"
+              className="button button--secondary"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void loadDbBackups();
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+        </summary>
+
+        {dbBackupsError ? (
+          <p id="db-viewer--db-backups--refresh-status" className="db-viewer-status" role="status" aria-live="polite">
+            {dbBackupsError}
+          </p>
+        ) : null}
+
+        {dbBackupsLoading ? (
+          <p className="db-viewer-empty-state">Loading database backups...</p>
+        ) : snapshotFiles.length === 0 ? (
+          <p className="db-viewer-empty-state">No saved database backups yet.</p>
+        ) : (
+          <ul id="db-viewer--db-backups--list" className="db-viewer-list">
+            {snapshotFiles.map((snapshot) => (
+              <li key={snapshot} className="db-viewer-list-item">
+                <div className="db-viewer-list-item-main">
+                  <div className="db-viewer-list-item-copy">
+                    <strong>{snapshot}</strong>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
 
       {(() => {
         const rendered: React.ReactNode[] = [];

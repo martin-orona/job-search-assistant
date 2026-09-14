@@ -20,6 +20,8 @@ public class Admin
         var group = parent.MapGroup("/admin");
         group.MapGet("/fix-db-enum-strings", (Delegate)FixDbEnumStrings);
         group.MapPost("/raw-sql", (Delegate)ExecuteRawSql);
+        group.MapGet("/db-snapshot", (Delegate)CreateDailyBackupSnapshot);
+        group.MapGet("/db-backups", (Delegate)GetDailyBackupSnapshots);
         group.MapGet("/clean-test-db", (Delegate)((HttpContext context) => TestDatabaseFlow.CleanTestDb(context, app.Environment)));
         return group;
     }
@@ -67,6 +69,18 @@ where work_model in ('0', '1', '2', '3');"
         using var connection = Database.Connect();
         var result = await connection.ExecuteAsync(request.sql);
         return Results.Ok(result);
+    }
+
+    public static Task<IResult> CreateDailyBackupSnapshot()
+    {
+        var snapshotPath = FileLifecycleManager.CreateDailyBackupSnapshot();
+        return Task.FromResult<IResult>(Results.Ok(new { path = snapshotPath }));
+    }
+
+    public static Task<IResult> GetDailyBackupSnapshots()
+    {
+        var snapshots = FileLifecycleManager.GetDailyBackupSnapshots();
+        return Task.FromResult<IResult>(Results.Ok(snapshots));
     }
 
     public record RawSqlRequest(string sql);

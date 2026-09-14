@@ -166,6 +166,64 @@ namespace DbViewer {
       await expect(heading).toBeVisible();
     });
 
+    test("Scenario: Daily backups list is visible in the DB Viewer tab", async ({ page }) => {
+      await page.route("**/api/v1/admin/db-backups", async (route) => {
+        if (route.request().method() === "GET") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(["JobSearchAssistant.db.2026-09-14T08-00-00Z", "JobSearchAssistant.db.2026-09-13T08-00-00Z"]),
+          });
+        }
+      });
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+
+      const backupSection = page.locator("#db-viewer--db-backups--container");
+      await expect(backupSection).toBeVisible();
+      await expect(page.locator("#db-viewer--db-backups--count")).toContainText("2 saved");
+      await expect(page.locator("#db-viewer--db-backups--list")).toContainText("JobSearchAssistant.db.2026-09-14T08-00-00Z");
+      await expect(page.locator("#db-viewer--db-backups--list")).toContainText("JobSearchAssistant.db.2026-09-13T08-00-00Z");
+    });
+
+    test("Scenario: Create Snapshot button creates a new daily snapshot", async ({ page }) => {
+      let snapshotCallCount = 0;
+
+      await page.route("**/api/v1/admin/db-snapshot", async (route) => {
+        snapshotCallCount += 1;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ path: "JobSearchAssistant.db.2026-09-14T10-20-30Z" }),
+        });
+      });
+
+      await page.route("**/api/v1/admin/db-backups", async (route) => {
+        if (route.request().method() === "GET") {
+          const payload =
+            snapshotCallCount > 0
+              ? ["JobSearchAssistant.db.2026-09-14T10-20-30Z", "JobSearchAssistant.db.2026-09-13T08-00-00Z"]
+              : ["JobSearchAssistant.db.2026-09-13T08-00-00Z"];
+
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(payload),
+          });
+        }
+      });
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+
+      await page.locator("#db-viewer--db-backups--create-snapshot-button").click();
+
+      await expect(page.locator("#db-viewer--db-backups--list")).toContainText("JobSearchAssistant.db.2026-09-14T10-20-30Z");
+      await expect(page.locator("#db-viewer--db-backups--count")).toContainText("2 saved");
+      expect(snapshotCallCount).toBeGreaterThan(0);
+    });
+
     test("Scenario: Refresh failure for a DB Viewer tab is visible to the user", async ({ page }) => {
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();

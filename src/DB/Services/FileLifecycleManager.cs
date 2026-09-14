@@ -207,6 +207,19 @@ public static class FileLifecycleManager
         return snapshotPath;
     }
 
+    public static List<string> GetDailyBackupSnapshots()
+    {
+        if (!Directory.Exists(CloudFolder))
+        {
+            return [];
+        }
+
+        return Directory.EnumerateFiles(CloudFolder, "JobSearchAssistant.db.*", SearchOption.TopDirectoryOnly)
+            .Select(file => Path.GetFileName(file) ?? file)
+            .OrderByDescending(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public static void SyncToCloud()
     {
         if (!string.IsNullOrWhiteSpace(ActiveTestFlowId))

@@ -323,6 +323,14 @@
   display: none;
 }
 
+.db-viewer-entity-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .db-viewer-entity-count {
   font-size: 0.85rem;
   opacity: 0.8;
@@ -350,7 +358,10 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg) 88%, var(--accent-bg) 12%);
-  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
 }
 
 .db-viewer-list-item--highlight {
@@ -457,8 +468,12 @@
 select {
   appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%);
-  background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
+  background-position:
+    calc(100% - 14px) calc(50% - 2px),
+    calc(100% - 9px) calc(50% - 2px);
+  background-size:
+    5px 5px,
+    5px 5px;
   background-repeat: no-repeat;
   padding-right: 28px;
   border: 1px solid var(--border);
@@ -509,8 +524,12 @@ select {
 .db-viewer-editor-label select {
   appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%);
-  background-position: calc(100% - 16px) calc(50% - 2px), calc(100% - 11px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
+  background-position:
+    calc(100% - 16px) calc(50% - 2px),
+    calc(100% - 11px) calc(50% - 2px);
+  background-size:
+    5px 5px,
+    5px 5px;
   background-repeat: no-repeat;
   padding-right: 32px;
 }
@@ -731,8 +750,12 @@ select {
 .resume-analyzer-actions-row select {
   appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%);
-  background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
+  background-position:
+    calc(100% - 14px) calc(50% - 2px),
+    calc(100% - 9px) calc(50% - 2px);
+  background-size:
+    5px 5px,
+    5px 5px;
   background-repeat: no-repeat;
   padding-right: 28px;
 }
