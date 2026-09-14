@@ -162,6 +162,25 @@ The JSA has a simple strategy to be able to restore the database to an earlier p
     Then it makes a backup copy in the Cloud Backup Database Directory with a timestamp at the end of the file name, to make each backup unique
     And only one daily backup is maintained, the latest daily backup of the day
 
+### Scenario: Database management - data export
+
+The JSA has the ability to export records in a structured format.
+
+    Given the User is on the DB Viewer tab
+
+    When the User presses the Export button, to the right of the Refresh button
+
+    Then the JSA presents the User with a list of Entity rows to select for export
+
+    And When the User makes the selections they want
+    And presses the confirmation button
+
+    Then the JSA exports a JSON document with the selected records and their child records
+
+    And When the User presses the Cancel button, to the right of the confirmation button, instead of the confirmation button
+
+    Then the selection list disappears
+
 </details>
 
 ## Feature: Job Postings

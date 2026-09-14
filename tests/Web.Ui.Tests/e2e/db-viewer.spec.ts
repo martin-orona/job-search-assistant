@@ -224,6 +224,105 @@ namespace DbViewer {
       expect(snapshotCallCount).toBeGreaterThan(0);
     });
 
+    test("Scenario: Export button opens record selection and downloads JSON", async ({ page }) => {
+      await page.route("**/api/v1/job-postings**", async (route) => {
+        if (route.request().method() === "GET") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                id: 1,
+                title: "Senior Engineer",
+                company: "Contoso",
+                location: "Remote",
+                salary: "$150,000",
+                workModel: "Remote",
+                url: "https://example.com/job/1",
+                document: {
+                  id: 10,
+                  title: "Senior Engineer",
+                  type: "markdown",
+                  content: "# Senior Engineer",
+                  source: "https://example.com/job/1",
+                },
+              },
+              {
+                id: 2,
+                title: "Platform Engineer",
+                company: "Fabrikam",
+                location: "Austin, TX",
+                salary: "$175,000",
+                workModel: "Hybrid",
+                url: "https://example.com/job/2",
+                document: {
+                  id: 11,
+                  title: "Platform Engineer",
+                  type: "markdown",
+                  content: "# Platform Engineer",
+                  source: "https://example.com/job/2",
+                },
+              },
+            ]),
+          });
+        }
+      });
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+
+      await page.locator("#db-viewer--job-postings--export-button").click();
+
+      await expect(page.locator("#db-viewer--job-postings--export-dialog")).toBeVisible();
+      await expect(page.locator("#db-viewer--job-postings--export-record-1-checkbox")).toBeVisible();
+      await expect(page.locator("#db-viewer--job-postings--export-record-2-checkbox")).toBeVisible();
+
+      const downloadPromise = page.waitForEvent("download");
+      await page.locator("#db-viewer--job-postings--export-confirm-button").click();
+      const download = await downloadPromise;
+
+      await expect(download.suggestedFilename()).toMatch(/\.json$/i);
+    });
+
+    test("Scenario: Canceling export closes the selection list", async ({ page }) => {
+      await page.route("**/api/v1/job-postings**", async (route) => {
+        if (route.request().method() === "GET") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                id: 1,
+                title: "Senior Engineer",
+                company: "Contoso",
+                location: "Remote",
+                salary: "$150,000",
+                workModel: "Remote",
+                url: "https://example.com/job/1",
+                document: {
+                  id: 10,
+                  title: "Senior Engineer",
+                  type: "markdown",
+                  content: "# Senior Engineer",
+                  source: "https://example.com/job/1",
+                },
+              },
+            ]),
+          });
+        }
+      });
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+
+      await page.locator("#db-viewer--job-postings--export-button").click();
+      await expect(page.locator("#db-viewer--job-postings--export-dialog")).toBeVisible();
+
+      await page.locator("#db-viewer--job-postings--export-cancel-button").click();
+
+      await expect(page.locator("#db-viewer--job-postings--export-dialog")).toBeHidden();
+    });
+
     test("Scenario: Refresh failure for a DB Viewer tab is visible to the user", async ({ page }) => {
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();

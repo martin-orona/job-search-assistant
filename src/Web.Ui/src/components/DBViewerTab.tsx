@@ -123,6 +123,11 @@ type EntityConfig<T> = {
     tertiary?: string;
   };
   buildDraft: (item: T) => Record<string, string>;
+  exportButtonId: string;
+  exportDialogId: string;
+  exportCheckboxId: (id: number) => string;
+  exportConfirmButtonId: string;
+  exportCancelButtonId: string;
 };
 
 type EditorState = {
@@ -228,6 +233,18 @@ function DBViewerTab() {
   const [dbBackupsExpanded, setDbBackupsExpanded] = useState(false);
   const [dbBackupsLoading, setDbBackupsLoading] = useState(false);
   const [dbBackupsError, setDbBackupsError] = useState("");
+  const [exportDialogOpen, setExportDialogOpen] = useState<Record<EntityKey, boolean>>({
+    "job-postings": false,
+    resumes: false,
+    "ai-prompt-templates": false,
+    "ai-prompts": false,
+  });
+  const [exportSelections, setExportSelections] = useState<Record<EntityKey, number[]>>({
+    "job-postings": [],
+    resumes: [],
+    "ai-prompt-templates": [],
+    "ai-prompts": [],
+  });
   const [error, setError] = useState("");
   const hasInitialLoadRef = useRef(false);
 
@@ -339,6 +356,79 @@ function DBViewerTab() {
       ...current,
       [key]: nextOpen,
     }));
+  }
+
+  function ensureExportSelection(key: EntityKey, items: Array<{ id?: number }>) {
+    setExportSelections((current) => {
+      const nextSelection = items.map((item) => Number(item.id ?? 0)).filter((id) => id > 0);
+
+      return {
+        ...current,
+        [key]: nextSelection,
+      };
+    });
+  }
+
+  function toggleExportSelection(key: EntityKey, id: number) {
+    setExportSelections((current) => {
+      const currentSelection = current[key] ?? [];
+      const nextSelection = currentSelection.includes(id)
+        ? currentSelection.filter((selectedId) => selectedId !== id)
+        : [...currentSelection, id];
+
+      return {
+        ...current,
+        [key]: nextSelection,
+      };
+    });
+  }
+
+  function normalizeExportRecord(entityKey: EntityKey, item: Record<string, unknown>) {
+    switch (entityKey) {
+      case "job-postings":
+      case "resumes":
+      case "ai-prompt-templates":
+        return item;
+      case "ai-prompts":
+        return item;
+      default:
+        return item;
+    }
+  }
+
+  function closeExportDialog(key: EntityKey) {
+    setExportDialogOpen((current) => ({ ...current, [key]: false }));
+    setError("");
+  }
+
+  function downloadExportSelection(key: EntityKey, items: Record<string, unknown>[]) {
+    const selectedIds = exportSelections[key] ?? [];
+    const payload = items.filter((item) => {
+      const id = Number((item as { id?: number }).id ?? 0);
+      return id > 0 && selectedIds.includes(id);
+    });
+
+    if (payload.length === 0) {
+      setError("Select at least one record to export.");
+      return;
+    }
+
+    const exportDocument = {
+      generatedAt: new Date().toISOString(),
+      entity: entityConfigs[key].label,
+      records: payload.map((record) => normalizeExportRecord(key, record)),
+    };
+
+    const blob = new Blob([JSON.stringify(exportDocument, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${entityConfigs[key].label.toLowerCase().replace(/\s+/g, "-")}-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    closeExportDialog(key);
   }
 
   function openEntityRecord(key: EntityKey, id: number | null | undefined) {
@@ -545,6 +635,11 @@ function DBViewerTab() {
       refreshStatusId: "db-viewer--job-postings--refresh-status",
       listId: "db-viewer--job-postings--list",
       refreshButtonId: "db-viewer--job-postings--refresh-button",
+      exportButtonId: "db-viewer--job-postings--export-button",
+      exportDialogId: "db-viewer--job-postings--export-dialog",
+      exportCheckboxId: (id) => `db-viewer--job-postings--export-record-${id}-checkbox`,
+      exportConfirmButtonId: "db-viewer--job-postings--export-confirm-button",
+      exportCancelButtonId: "db-viewer--job-postings--export-cancel-button",
       recordId: (id) => `db-viewer--job-postings--record-${id}`,
       recordControlId: (id, controlName) => `db-viewer--job-postings--${controlName}--record-${id}`,
       editorId: "db-viewer--job-postings--editor",
@@ -584,6 +679,11 @@ function DBViewerTab() {
       refreshStatusId: "db-viewer--resumes--refresh-status",
       listId: "db-viewer--resumes--list",
       refreshButtonId: "db-viewer--resumes--refresh-button",
+      exportButtonId: "db-viewer--resumes--export-button",
+      exportDialogId: "db-viewer--resumes--export-dialog",
+      exportCheckboxId: (id) => `db-viewer--resumes--export-record-${id}-checkbox`,
+      exportConfirmButtonId: "db-viewer--resumes--export-confirm-button",
+      exportCancelButtonId: "db-viewer--resumes--export-cancel-button",
       recordId: (id) => `db-viewer--resumes--record-${id}`,
       recordControlId: (id, controlName) => `db-viewer--resumes--${controlName}--record-${id}`,
       editorId: "db-viewer--resumes--editor",
@@ -620,6 +720,11 @@ function DBViewerTab() {
       refreshStatusId: "db-viewer--ai-prompt-templates--refresh-status",
       listId: "db-viewer--ai-prompt-templates--list",
       refreshButtonId: "db-viewer--ai-prompt-templates--refresh-button",
+      exportButtonId: "db-viewer--ai-prompt-templates--export-button",
+      exportDialogId: "db-viewer--ai-prompt-templates--export-dialog",
+      exportCheckboxId: (id) => `db-viewer--ai-prompt-templates--export-record-${id}-checkbox`,
+      exportConfirmButtonId: "db-viewer--ai-prompt-templates--export-confirm-button",
+      exportCancelButtonId: "db-viewer--ai-prompt-templates--export-cancel-button",
       recordId: (id) => `db-viewer--ai-prompt-templates--record-${id}`,
       recordControlId: (id, controlName) => `db-viewer--ai-prompt-templates--${controlName}--record-${id}`,
       editorId: "db-viewer--ai-prompt-templates--editor",
@@ -653,6 +758,11 @@ function DBViewerTab() {
       refreshStatusId: "db-viewer--ai-prompts--refresh-status",
       listId: "db-viewer--ai-prompts--list",
       refreshButtonId: "db-viewer--ai-prompts--refresh-button",
+      exportButtonId: "db-viewer--ai-prompts--export-button",
+      exportDialogId: "db-viewer--ai-prompts--export-dialog",
+      exportCheckboxId: (id) => `db-viewer--ai-prompts--export-record-${id}-checkbox`,
+      exportConfirmButtonId: "db-viewer--ai-prompts--export-confirm-button",
+      exportCancelButtonId: "db-viewer--ai-prompts--export-cancel-button",
       recordId: (id) => `db-viewer--ai-prompts--record-${id}`,
       recordControlId: (id, controlName) => `db-viewer--ai-prompts--${controlName}--record-${id}`,
       editorId: "db-viewer--ai-prompts--editor",
@@ -813,24 +923,89 @@ function DBViewerTab() {
                 <span id={entity.countId} className="db-viewer-entity-count">
                   {isLoading ? "Loading…" : `${items.length} saved`}
                 </span>
-                <button
-                  id={entity.refreshButtonId}
-                  type="button"
-                  className="button button--secondary"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void loadEntity(entity.key, entity.fetchUrl, entity.setState as React.Dispatch<React.SetStateAction<unknown[]>>);
-                  }}
-                >
-                  Refresh
-                </button>
+                <div className="db-viewer-entity-actions">
+                  <button
+                    id={entity.exportButtonId}
+                    type="button"
+                    className="button button--secondary"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setExpandedEntities((current) => ({ ...current, [entity.key]: true }));
+                      ensureExportSelection(entity.key, items as Array<{ id?: number }>);
+                      setExportDialogOpen((current) => ({ ...current, [entity.key]: true }));
+                    }}
+                  >
+                    Export
+                  </button>
+                  <button
+                    id={entity.refreshButtonId}
+                    type="button"
+                    className="button button--secondary"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void loadEntity(entity.key, entity.fetchUrl, entity.setState as React.Dispatch<React.SetStateAction<unknown[]>>);
+                    }}
+                  >
+                    Refresh
+                  </button>
+                </div>
               </summary>
 
               {refreshErrors[entity.key] ? (
                 <p id={entity.refreshStatusId} className="db-viewer-status" role="status" aria-live="polite">
                   {refreshErrors[entity.key]}
                 </p>
+              ) : null}
+
+              {exportDialogOpen[entity.key] ? (
+                <div id={entity.exportDialogId} className="db-viewer-export-dialog" role="dialog" aria-modal="false">
+                  <div className="db-viewer-export-dialog__header">
+                    <strong>Export {entity.label} records</strong>
+                  </div>
+                  <div className="db-viewer-export-dialog__list">
+                    {items.map((item) => {
+                      const recordId = Number((item as { id?: number }).id ?? 0);
+                      if (recordId <= 0) {
+                        return null;
+                      }
+
+                      const isSelected = (exportSelections[entity.key] ?? []).includes(recordId);
+                      return (
+                        <label key={recordId} className="db-viewer-export-option" htmlFor={entity.exportCheckboxId(recordId)}>
+                          <input
+                            id={entity.exportCheckboxId(recordId)}
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleExportSelection(entity.key, recordId)}
+                          />
+                          <span>
+                            {(item as { name?: string; title?: string }).name ?? (item as { title?: string }).title ?? `Record ${recordId}`}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="db-viewer-export-dialog__actions">
+                    <button
+                      id={entity.exportConfirmButtonId}
+                      type="button"
+                      className="button button--primary"
+                      onClick={() => downloadExportSelection(entity.key, items as Record<string, unknown>[])}
+                    >
+                      Confirm export
+                    </button>
+                    <button
+                      id={entity.exportCancelButtonId}
+                      type="button"
+                      className="button button--secondary"
+                      onClick={() => closeExportDialog(entity.key)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               ) : null}
 
               {isLoading ? (
