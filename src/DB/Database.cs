@@ -55,6 +55,8 @@ public class Database
     {
         var connection = new SqliteConnection(FileLifecycleManager.ConnectionString);
         connection.Open();
+        FileLifecycleManager.TrackConnection(connection);
+
         using (var command = connection.CreateCommand())
         {
             command.CommandText = "PRAGMA foreign_keys = ON;";

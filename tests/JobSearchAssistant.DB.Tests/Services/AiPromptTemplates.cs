@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Dapper;
 
 using JobSearchAssistant.DB.Models;
@@ -13,6 +15,31 @@ public sealed class AiPromptTemplates_Service_Tests : SqliteTestBase
     }
 
     [Fact]
+    public async Task AiPromptTemplates_Create_UsesDocumentBackingStore()
+    {
+        RunMigrations();
+
+        var created = await new AiPromptTemplates().Create(new AiPromptTemplate
+        {
+            Name = "resume-summary",
+            Document = new Document
+            {
+                Title = "Resume summary template",
+                Type = DocumentType.Markdown,
+                Content = "Summarize the candidate profile using clear, role-oriented language.",
+                Source = "tests"
+            }
+        });
+
+        Assert.NotNull(created);
+        Assert.NotEqual(0, created.Id);
+        Assert.Equal("resume-summary", created.Name);
+        Assert.NotEqual(0, created.DocumentId);
+        Assert.Equal("Resume summary template", created.Document.Title);
+        Assert.Equal("Summarize the candidate profile using clear, role-oriented language.", created.Document.Content);
+    }
+
+    [Fact]
     public async Task AiPromptTemplates_Create_ReturnsCreatedRecord()
     {
         RunMigrations();
@@ -20,13 +47,20 @@ public sealed class AiPromptTemplates_Service_Tests : SqliteTestBase
         var created = await new AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "resume-summary",
-            Template = "Summarize the candidate profile using clear, role-oriented language."
+            Document = new Document
+            {
+                Title = "Resume summary template",
+                Type = DocumentType.Markdown,
+                Content = "Summarize the candidate profile using clear, role-oriented language.",
+                Source = "tests"
+            }
         });
 
         Assert.NotNull(created);
         Assert.NotEqual(0, created.Id);
         Assert.Equal("resume-summary", created.Name);
-        Assert.Equal("Summarize the candidate profile using clear, role-oriented language.", created.Template);
+        Assert.NotEqual(0, created.DocumentId);
+        Assert.Equal("Summarize the candidate profile using clear, role-oriented language.", created.Document.Content);
     }
 
     [Fact]
@@ -37,7 +71,13 @@ public sealed class AiPromptTemplates_Service_Tests : SqliteTestBase
         var created = await new AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "job-evaluation",
-            Template = "Evaluate the work experience and fit for the target role."
+            Document = new Document
+            {
+                Title = "Job evaluation template",
+                Type = DocumentType.Markdown,
+                Content = "Evaluate the work experience and fit for the target role.",
+                Source = "tests"
+            }
         });
         Assert.NotNull(created);
 
@@ -46,7 +86,7 @@ public sealed class AiPromptTemplates_Service_Tests : SqliteTestBase
         Assert.NotNull(fetched);
         Assert.Equal(created.Id, fetched!.Id);
         Assert.Equal("job-evaluation", fetched.Name);
-        Assert.Equal("Evaluate the work experience and fit for the target role.", fetched.Template);
+        Assert.Equal("Evaluate the work experience and fit for the target role.", fetched.Document.Content);
     }
 
     [Fact]
@@ -57,7 +97,13 @@ public sealed class AiPromptTemplates_Service_Tests : SqliteTestBase
         var created = await new AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "before-update",
-            Template = "Original template content"
+            Document = new Document
+            {
+                Title = "Before update template",
+                Type = DocumentType.Markdown,
+                Content = "Original template content",
+                Source = "tests"
+            }
         });
         Assert.NotNull(created);
 
@@ -65,13 +111,21 @@ public sealed class AiPromptTemplates_Service_Tests : SqliteTestBase
         {
             Id = created.Id,
             Name = "after-update",
-            Template = "Updated template content"
+            DocumentId = created.DocumentId,
+            Document = new Document
+            {
+                Id = created.DocumentId,
+                Title = "After update template",
+                Type = DocumentType.Markdown,
+                Content = "Updated template content",
+                Source = "tests"
+            }
         });
 
         Assert.NotNull(updated);
         Assert.Equal(created.Id, updated!.Id);
         Assert.Equal("after-update", updated.Name);
-        Assert.Equal("Updated template content", updated.Template);
+        Assert.Equal("Updated template content", updated.Document.Content);
     }
 
     [Fact]
@@ -82,19 +136,27 @@ public sealed class AiPromptTemplates_Service_Tests : SqliteTestBase
         var created = await new AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "original-name",
-            Template = "Original template content"
+            Document = new Document
+            {
+                Title = "Original patch template",
+                Type = DocumentType.Markdown,
+                Content = "Original template content",
+                Source = "tests"
+            }
         });
         Assert.NotNull(created);
 
         var patched = await new AiPromptTemplates().PartialUpdate(created.Id, new Dictionary<string, object?>
         {
-            ["Template"] = "Patched template content"
+            ["documentId"] = created.DocumentId,
+            ["document"] = JsonDocument.Parse($"{{\"id\": {created.DocumentId}, \"title\": \"Original patch template\", \"type\": {(int)DocumentType.Markdown}, \"content\": \"Patched template content\", \"source\": \"tests\"}}")
+                .RootElement,
         });
 
         Assert.NotNull(patched);
         Assert.Equal(created.Id, patched!.Id);
         Assert.Equal("original-name", patched.Name);
-        Assert.Equal("Patched template content", patched.Template);
+        Assert.Equal("Patched template content", patched.Document.Content);
     }
 
     [Fact]
@@ -105,7 +167,13 @@ public sealed class AiPromptTemplates_Service_Tests : SqliteTestBase
         var created = await new AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "delete-me",
-            Template = "This template will be deleted"
+            Document = new Document
+            {
+                Title = "Delete template",
+                Type = DocumentType.Markdown,
+                Content = "This template will be deleted",
+                Source = "tests"
+            }
         });
         Assert.NotNull(created);
 

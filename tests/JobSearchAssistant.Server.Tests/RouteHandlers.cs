@@ -120,7 +120,13 @@ public sealed class Server_Route_Handler_Tests : SqliteTestBase
         var context = CreateJsonHttpContext(new
         {
             name = "resume-summary",
-            template = "Summarize the candidate's background for a hiring manager."
+            document = new
+            {
+                title = "Resume summary template",
+                type = (int)DocumentType.Markdown,
+                content = "Summarize the candidate's background for a hiring manager.",
+                source = "server-route-tests"
+            }
         });
 
         var result = await new global::JobSearchAssistant.Server.AiPromptTemplates().Create(context);
@@ -169,7 +175,13 @@ public sealed class Server_Route_Handler_Tests : SqliteTestBase
         var template = await new global::JobSearchAssistant.DB.Services.AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "resume-screening",
-            Template = "Review the resume for a fit score."
+            Document = new Document
+            {
+                Title = "Resume screening template",
+                Type = DocumentType.Markdown,
+                Content = "Review the resume for a fit score.",
+                Source = "server-route-tests"
+            }
         });
         Assert.NotNull(template);
 

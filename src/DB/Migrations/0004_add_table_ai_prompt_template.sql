@@ -11,7 +11,8 @@ create table if not exists ai_prompt_template (
     created_at datetime not null default CURRENT_TIMESTAMP,
     updated_at datetime not null default CURRENT_TIMESTAMP,
     name text not null,
-    template text not null
+    document_id integer not null,
+    foreign key (document_id) references document(id)
 );
 
 -- ensure the updated_at column is up to date

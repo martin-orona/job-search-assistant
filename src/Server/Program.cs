@@ -13,6 +13,7 @@ using JobSearchAssistant.DB;
 
 public class Program
 {
+    public const string RoutePrefix_APIv1 = "/api/v1";
     private static readonly HttpClient HttpClient = new HttpClient();
 
     public static void Main(string[] args)
@@ -21,12 +22,14 @@ public class Program
 
         Database.Startup(settings);
         Database.RunMigrations();
+        FileLifecycleManager.CleanupStaleTestDatabases();
 
         var builder = WebApplication.CreateBuilder(args);
 
         builder.Services.Configure<JsonOptions>(options =>
         {
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         });
 
         builder.Services.AddCors();
@@ -38,12 +41,26 @@ public class Program
             app.UseDeveloperExceptionPage();
         }
 
+        app.Use(async (context, next) =>
+        {
+            Console.WriteLine($"[TEST] processing request {context.Request.Method} {context.Request.Path}");
+
+            // log out the headers for debugging purposes
+            foreach (var header in context.Request.Headers)
+            {
+                Console.WriteLine($"[TEST] Header: {header.Key} = {header.Value}");
+            }
+
+            await TestDatabaseFlow.ApplyAsync(context, app.Environment);
+            await next();
+        });
+
         app.UseStaticFiles();
         app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 
         app.MapGet("/", () => "hello world");
-        var api = app.MapGroup("/api/v1");
-        var admin = Admin.Map(api);
+        var api = app.MapGroup(RoutePrefix_APIv1);
+        var admin = Admin.Map(api, app);
         var docs = new Documents().Map(api);
         var jobPostings = new JobPostings().Map(api);
         var aiPromptTemplates = new AiPromptTemplates().Map(api);

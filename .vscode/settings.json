@@ -1,19 +1,38 @@
 {
-    "chat.tools.terminal.autoApprove": {
-        "dotnet build": true,
-        "dotnet test": true,
-        "git check-ignore": true,
-        "/^cd C:\\\\dev\\\\job-search-assistant\\\\tests\\\\Web\\.Ui\\.Tests; pnpm test$/": {
-            "approve": true,
-            "matchCommandLine": true
-        }
-    },
-    "chat.newSession.defaultMode": "Squad",
-    "files.exclude": {
-        "src/web-browser-extension": true
-    },
-    "playwright.configs": [
-        "tests/Web.Ui.Tests/playwright.config.ts"
-    ],
-    "playwright.configPath": "tests/Web.Ui.Tests/playwright.config.ts"
+  "chat.tools.terminal.autoApprove": {
+    "dotnet build": true,
+    "dotnet test": true,
+    "git check-ignore": true,
+    "/^cd C:\\\\dev\\\\job-search-assistant\\\\tests\\\\Web\\.Ui\\.Tests; pnpm test$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  },
+  "chat.newSession.defaultMode": "Squad",
+  "editor.formatOnSave": true,
+  "editor.formatOnSaveMode": "file",
+  "editor.trimAutoWhitespace": true,
+  "files.trimTrailingWhitespace": true,
+  "prettier.printWidth": 140,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "files.exclude": {
+    "src/web-browser-extension": true
+  },
+  "playwright.configs": ["tests/Web.Ui.Tests/playwright.config.ts"],
+  "playwright.configPath": "tests/Web.Ui.Tests/playwright.config.ts"
 }

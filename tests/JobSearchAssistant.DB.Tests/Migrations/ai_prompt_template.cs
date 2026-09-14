@@ -29,22 +29,39 @@ public sealed class ai_prompt_template_Tests : SqliteTestBase
 
         using var connection = Database.Connect();
 
+        var documentId = await connection.QuerySingleAsync<int>(
+            @"insert into document (title, type, content, source)
+              values (@Title, @Type, @Content, @Source)
+              returning id",
+            new
+            {
+                Title = "Resume summary template",
+                Type = "Markdown",
+                Content = "Summarize the candidate profile for a technical hiring manager.",
+                Source = "migration-tests"
+            });
+
         var insertedId = await connection.QuerySingleAsync<int>(
-            @"insert into ai_prompt_template (name, template)
-              values (@Name, @Template)
+            @"insert into ai_prompt_template (name, document_id)
+              values (@Name, @DocumentId)
               returning id",
             new
             {
                 Name = "resume-summary",
-                Template = "Summarize the candidate profile for a technical hiring manager."
+                DocumentId = documentId
             });
 
         var row = await connection.QuerySingleAsync<dynamic>(
-            "select name, template from ai_prompt_template where id = @Id",
+            "select name, document_id from ai_prompt_template where id = @Id",
             new { Id = insertedId });
 
+        var documentRow = await connection.QuerySingleAsync<dynamic>(
+            "select content from document where id = @Id",
+            new { Id = documentId });
+
         Assert.Equal("resume-summary", (string)row.name);
-        Assert.Equal("Summarize the candidate profile for a technical hiring manager.", (string)row.template);
+        Assert.Equal(documentId, (long)row.document_id);
+        Assert.Equal("Summarize the candidate profile for a technical hiring manager.", (string)documentRow.content);
     }
 
     [Fact]
@@ -54,14 +71,26 @@ public sealed class ai_prompt_template_Tests : SqliteTestBase
 
         using var connection = Database.Connect();
 
+        var documentId = await connection.QuerySingleAsync<int>(
+            @"insert into document (title, type, content, source)
+              values (@Title, @Type, @Content, @Source)
+              returning id",
+            new
+            {
+                Title = "Initial template",
+                Type = "Markdown",
+                Content = "Original template content",
+                Source = "migration-tests"
+            });
+
         var insertedId = await connection.QuerySingleAsync<int>(
-            @"insert into ai_prompt_template (name, template)
-              values (@Name, @Template)
+            @"insert into ai_prompt_template (name, document_id)
+              values (@Name, @DocumentId)
               returning id",
             new
             {
                 Name = "initial-template",
-                Template = "Original template content"
+                DocumentId = documentId
             });
 
         var originalUpdatedAt = await connection.QuerySingleAsync<DateTime>(
@@ -71,8 +100,8 @@ public sealed class ai_prompt_template_Tests : SqliteTestBase
         await Task.Delay(1100);
 
         await connection.ExecuteAsync(
-            "update ai_prompt_template set template = @Template where id = @Id",
-            new { Template = "Updated template content", Id = insertedId });
+            "update ai_prompt_template set name = @Name where id = @Id",
+            new { Name = "updated-template", Id = insertedId });
 
         var updatedAt = await connection.QuerySingleAsync<DateTime>(
             "select updated_at from ai_prompt_template where id = @Id",

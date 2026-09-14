@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 using Dapper;
 
@@ -195,6 +196,60 @@ public sealed class JobPostings_Controller_Tests : SqliteTestBase
     }
 
     [Fact]
+    public async Task JobPostings_GetAll_DeepTrue_ReturnsDocumentWhenPresent()
+    {
+        RunMigrations();
+
+        var document = await new global::JobSearchAssistant.DB.Services.Documents().Create(new Document
+        {
+            Title = "Deep job posting source",
+            Type = DocumentType.Markdown,
+            Content = "Deep job description",
+            Source = "job-postings-deep-list"
+        });
+        Assert.NotNull(document);
+
+        var created = await new global::JobSearchAssistant.DB.Services.JobPostings().Create(new JobPosting
+        {
+            Title = "Deep job posting",
+            Company = "Deep Co",
+            Location = "Remote",
+            WorkModel = WorkModel.Remote,
+            Salary = "$110k",
+            Url = "https://example.com/jobs/deep-job",
+            DocumentId = document.Id
+        });
+        Assert.NotNull(created);
+
+        var result = await new global::JobSearchAssistant.Server.JobPostings().GetAll(deep: true);
+        var context = CreateContext();
+        await result.ExecuteAsync(context);
+
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        var body = await ReadResponseBodyAsync(context);
+        Assert.Contains("\"document\"", body);
+        Assert.Contains("Deep job description", body);
+
+        using var payload = JsonDocument.Parse(body);
+        var items = payload.RootElement;
+        Assert.Equal(JsonValueKind.Array, items.ValueKind);
+        Assert.NotEmpty(items.EnumerateArray());
+
+        foreach (var item in items.EnumerateArray())
+        {
+            Assert.True(item.TryGetProperty("id", out var idElement));
+            Assert.True(idElement.TryGetInt32(out var id));
+            Assert.True(id > 0, $"Expected a positive record id in deep job-posting response, got {id}.");
+
+            Assert.True(item.TryGetProperty("document", out var documentElement));
+            Assert.True(documentElement.TryGetProperty("id", out var documentIdElement));
+            Assert.True(documentIdElement.TryGetInt32(out var documentId));
+            Assert.True(documentId > 0, $"Expected a positive document id in deep job-posting response, got {documentId}.");
+            Assert.Equal("Deep job description", documentElement.GetProperty("content").GetString());
+        }
+    }
+
+    [Fact]
     public async Task JobPostings_Update_ReturnsUpdatedJobPosting()
     {
         RunMigrations();
@@ -381,14 +436,28 @@ public sealed class AiPromptTemplates_Controller_Tests : SqliteTestBase
         var created = await new global::JobSearchAssistant.DB.Services.AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "before-update",
-            Template = "Original template"
+            Document = new Document
+            {
+                Title = "Before update template",
+                Type = DocumentType.Markdown,
+                Content = "Original template",
+                Source = "server-tests"
+            }
         });
         Assert.NotNull(created);
 
         var context = CreateJsonHttpContext(new
         {
             name = "after-update",
-            template = "Updated template"
+            documentId = created.DocumentId,
+            document = new
+            {
+                id = created.DocumentId,
+                title = "After update template",
+                type = (int)DocumentType.Markdown,
+                content = "Updated template",
+                source = "server-tests"
+            }
         });
 
         var result = await new global::JobSearchAssistant.Server.AiPromptTemplates().Update(created.Id, context);
@@ -416,13 +485,27 @@ public sealed class AiPromptTemplates_Controller_Tests : SqliteTestBase
         var created = await new global::JobSearchAssistant.DB.Services.AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "before-patch",
-            Template = "Original template"
+            Document = new Document
+            {
+                Title = "Before patch template",
+                Type = DocumentType.Markdown,
+                Content = "Original template",
+                Source = "server-tests"
+            }
         });
         Assert.NotNull(created);
 
         var context = CreateJsonHttpContext(new Dictionary<string, object?>
         {
-            ["template"] = "Patched template"
+            ["documentId"] = created.DocumentId,
+            ["document"] = new Dictionary<string, object?>
+            {
+                ["id"] = created.DocumentId,
+                ["title"] = "Before patch template",
+                ["type"] = (int)DocumentType.Markdown,
+                ["content"] = "Patched template",
+                ["source"] = "server-tests"
+            }
         });
 
         var result = await new global::JobSearchAssistant.Server.AiPromptTemplates().Patch(created.Id, context);
@@ -436,8 +519,8 @@ public sealed class AiPromptTemplates_Controller_Tests : SqliteTestBase
 
         using var connection = Database.Connect();
         var patchedTemplate = await connection.QuerySingleAsync<string>(
-            "select template from ai_prompt_template where id = @Id",
-            new { created.Id });
+            "select content from document where id = @Id",
+            new { Id = created.DocumentId });
 
         Assert.Equal("Patched template", patchedTemplate);
     }
@@ -450,7 +533,13 @@ public sealed class AiPromptTemplates_Controller_Tests : SqliteTestBase
         var created = await new global::JobSearchAssistant.DB.Services.AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "delete-me",
-            Template = "This template will be deleted"
+            Document = new Document
+            {
+                Title = "Delete template",
+                Type = DocumentType.Markdown,
+                Content = "This template will be deleted",
+                Source = "server-tests"
+            }
         });
         Assert.NotNull(created);
 
@@ -481,6 +570,55 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
 {
     public AiPrompts_Controller_Tests() : base("jobsearchassistant-ai-prompts-controller-tests")
     {
+    }
+
+    [Fact]
+    public async Task AiPrompts_GetAll_DeepTrue_ReturnsNestedObjects()
+    {
+        RunMigrations();
+
+        var dependencies = await CreateDependenciesAsync("deep-list");
+        var created = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
+        {
+            Name = "deep-list-prompt",
+            AiUrl = "https://example.com/ai/deep-list",
+            JobPostingId = dependencies.jobPosting.Id,
+            ResumeId = dependencies.resume.Id,
+            AiPromptTemplateId = dependencies.template.Id,
+            PromptDocumentId = dependencies.promptDocument.Id,
+            ResponseDocumentId = dependencies.responseDocument.Id
+        });
+        Assert.NotNull(created);
+
+        var result = await new global::JobSearchAssistant.Server.AiPrompts().GetAll(deep: true);
+        var context = CreateContext();
+        await result.ExecuteAsync(context);
+
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        var body = await ReadResponseBodyAsync(context);
+        Assert.Contains("\"jobPosting\"", body);
+        Assert.Contains("\"resume\"", body);
+        Assert.Contains("\"aiPromptTemplate\"", body);
+        Assert.Contains("\"promptDocument\"", body);
+        Assert.Contains("\"responseDocument\"", body);
+        Assert.Contains("deep-list-prompt", body);
+
+        using var payload = JsonDocument.Parse(body);
+        var items = payload.RootElement;
+        Assert.Equal(JsonValueKind.Array, items.ValueKind);
+        Assert.NotEmpty(items.EnumerateArray());
+
+        foreach (var item in items.EnumerateArray())
+        {
+            Assert.True(item.TryGetProperty("id", out var idElement));
+            Assert.True(idElement.TryGetInt32(out var id));
+            Assert.True(id > 0, $"Expected a positive AI prompt id in deep response, got {id}.");
+
+            Assert.True(item.TryGetProperty("jobPosting", out var jobPostingElement));
+            Assert.True(jobPostingElement.TryGetProperty("id", out var jobPostingIdElement));
+            Assert.True(jobPostingIdElement.TryGetInt32(out var jobPostingId));
+            Assert.True(jobPostingId > 0, $"Expected a positive nested jobPosting id in deep response, got {jobPostingId}.");
+        }
     }
 
     [Fact]
@@ -654,7 +792,13 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var template = await new global::JobSearchAssistant.DB.Services.AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = $"template-{suffix}",
-            Template = "Evaluate the candidate for the role."
+            Document = new Document
+            {
+                Title = $"Template {suffix}",
+                Type = DocumentType.Markdown,
+                Content = "Evaluate the candidate for the role.",
+                Source = "ai-prompts-controller"
+            }
         });
         Assert.NotNull(template);
 

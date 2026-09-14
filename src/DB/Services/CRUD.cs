@@ -39,9 +39,13 @@ public class ModelCrud<T> where T : Model
 
     public virtual async Task<IReadOnlyList<T>> GetAll() => await this.GetAll(null);
 
+    public virtual async Task<IReadOnlyList<T>> GetAll(bool deep) => await CRUD.GetAll<T>(this.TableName, null, deep);
+
     public virtual async Task<IReadOnlyList<T>> GetAll(QueryOptions? options) => await CRUD.GetAll<T>(this.TableName, options);
 
     public virtual async Task<T?> GetById(int id) => await CRUD.GetById<T>(this.TableName, id);
+
+    public virtual async Task<T?> GetById(int id, bool deep) => await CRUD.GetById<T>(this.TableName, id, deep);
 
     public virtual async Task<T?> GetById(int id, SqliteConnection connection) => await CRUD.GetById<T>(this.TableName, id, connection);
 
@@ -321,12 +325,19 @@ public class CRUD
     //     }
     // }
 
-    internal static async Task<IReadOnlyList<T>> GetAll<T>(string tableName, QueryOptions? options) where T : Model
+    internal static async Task<IReadOnlyList<T>> GetAll<T>(string tableName, QueryOptions? options, bool deep = false) where T : Model
     {
         using var connection = Database.Connect();
-        var sql = QueryBuilder.BuildSelectAll(tableName, options);
-        var records = await connection.QueryAsync<T>(sql);
-        return records.ToList();
+        var sql = QueryBuilder.BuildSelectAll(tableName, options, deep, typeof(T));
+
+        if (!deep)
+        {
+            var records = await connection.QueryAsync<T>(sql);
+            return records.ToList();
+        }
+
+        var rows = await connection.QueryAsync<dynamic>(sql);
+        return MapDeepRows<T>(rows).ToList();
     }
 
     /* public override async Task<IReadOnlyList<Resume>> GetAll(QueryOptions? options)
@@ -386,6 +397,20 @@ public class CRUD
     {
         using var connection = Database.Connect();
         return await GetById<T>(tableName, id, connection);
+    }
+
+    internal static async Task<T?> GetById<T>(string tableName, int id, bool deep = false) where T : Model
+    {
+        using var connection = Database.Connect();
+
+        if (!deep)
+        {
+            return await GetById<T>(tableName, id, connection);
+        }
+
+        var rows = await connection.QueryAsync<dynamic>(QueryBuilder.BuildSelectById(tableName, deep, typeof(T)), new { id });
+        var record = MapDeepRows<T>(rows).FirstOrDefault();
+        return record;
     }
 
     internal static async Task<T?> GetById<T>(string tableName, int id, SqliteConnection connection) where T : Model
@@ -715,6 +740,221 @@ public class CRUD
             await transaction.RollbackAsync();
             throw new DatabaseException($"Unable to delete [{tableName}] record [{id}] with document. Reason: {ex.Message}", ex);
         }
+    }
+
+    private static IReadOnlyList<T> MapDeepRows<T>(IEnumerable<dynamic> rows) where T : Model
+    {
+        var modelType = typeof(T);
+        var baseScalarProperties = QueryBuilder.GetBaseScalarProperties(modelType);
+        var nestedModelMetadata = QueryBuilder.GetDeepModelMetadata(modelType);
+        var results = new List<T>();
+
+        foreach (var row in rows)
+        {
+            var valueMap = ((IDictionary<string, object?>)row).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+            var instance = (T)Activator.CreateInstance(modelType)!;
+
+            foreach (var property in baseScalarProperties)
+            {
+                var snakeCaseName = Formatting.PascalToSnakeCase(property.Name);
+                if (!valueMap.TryGetValue(snakeCaseName, out var rawValue) || rawValue == null)
+                {
+                    continue;
+                }
+
+                var convertedValue = ConvertValue(rawValue, property.PropertyType);
+                if (convertedValue != null)
+                {
+                    property.SetValue(instance, convertedValue);
+                }
+            }
+
+            foreach (var nestedMetadata in nestedModelMetadata)
+            {
+                var nestedType = nestedMetadata.PropertyType;
+                var nestedPrefix = nestedMetadata.Alias;
+                var nestedInstance = Activator.CreateInstance(nestedType)!;
+                var nestedScalars = QueryBuilder.GetBaseScalarProperties(nestedType);
+                var hasNestedValues = false;
+
+                foreach (var scalarProperty in nestedScalars)
+                {
+                    var snakeCaseName = Formatting.PascalToSnakeCase(scalarProperty.Name);
+                    var key = $"{nestedPrefix}_{snakeCaseName}";
+                    if (!valueMap.TryGetValue(key, out var rawValue) || rawValue == null)
+                    {
+                        continue;
+                    }
+
+                    var convertedValue = ConvertValue(rawValue, scalarProperty.PropertyType);
+                    if (convertedValue != null)
+                    {
+                        scalarProperty.SetValue(nestedInstance, convertedValue);
+                        hasNestedValues = true;
+                    }
+                }
+
+                if (typeof(ModelWithDocument).IsAssignableFrom(nestedType) && nestedType != typeof(Document))
+                {
+                    var documentProperty = nestedType.GetProperty(nameof(ModelWithDocument.Document));
+                    var documentInstance = (Document?)Activator.CreateInstance(typeof(Document));
+                    var documentScalars = QueryBuilder.GetBaseScalarProperties(typeof(Document));
+                    var hasDocumentValues = false;
+
+                    foreach (var documentScalar in documentScalars)
+                    {
+                        var snakeCaseName = Formatting.PascalToSnakeCase(documentScalar.Name);
+                        var key = $"{nestedPrefix}_document_{snakeCaseName}";
+                        if (!valueMap.TryGetValue(key, out var rawValue) || rawValue == null)
+                        {
+                            continue;
+                        }
+
+                        var convertedValue = ConvertValue(rawValue, documentScalar.PropertyType);
+                        if (convertedValue != null)
+                        {
+                            documentScalar.SetValue(documentInstance, convertedValue);
+                            hasDocumentValues = true;
+                        }
+                    }
+
+                    if (hasDocumentValues)
+                    {
+                        documentProperty?.SetValue(nestedInstance, documentInstance);
+                        hasNestedValues = true;
+                    }
+                }
+
+                if (hasNestedValues)
+                {
+                    nestedMetadata.Property.SetValue(instance, nestedInstance);
+                }
+            }
+
+            results.Add(instance);
+        }
+
+        return results;
+    }
+
+    private static object? ConvertValue(object? rawValue, Type targetType)
+    {
+        if (rawValue == null)
+        {
+            return null;
+        }
+
+        var value = rawValue;
+        if (targetType == typeof(string))
+        {
+            return value.ToString();
+        }
+
+        if (targetType.IsEnum)
+        {
+            if (value is string enumName)
+            {
+                if (int.TryParse(enumName, out var numericEnumValue))
+                {
+                    return Enum.ToObject(targetType, numericEnumValue);
+                }
+
+                return Enum.Parse(targetType, enumName, ignoreCase: true);
+            }
+
+            return Enum.ToObject(targetType, value);
+        }
+
+        if (targetType == typeof(bool))
+        {
+            return Convert.ToBoolean(value);
+        }
+
+        if (targetType == typeof(int))
+        {
+            return Convert.ToInt32(value);
+        }
+
+        if (targetType == typeof(long))
+        {
+            return Convert.ToInt64(value);
+        }
+
+        if (targetType == typeof(DateTimeOffset))
+        {
+            return value is DateTimeOffset offset ? offset : DateTimeOffset.Parse(value.ToString() ?? string.Empty);
+        }
+
+        if (targetType == typeof(DateTime))
+        {
+            return value is DateTime dateTime ? dateTime : DateTime.Parse(value.ToString() ?? string.Empty);
+        }
+
+        if (targetType == typeof(decimal))
+        {
+            return Convert.ToDecimal(value);
+        }
+
+        if (Nullable.GetUnderlyingType(targetType) is var nullableType && nullableType != null)
+        {
+            return ConvertValue(value, nullableType);
+        }
+
+        return Convert.ChangeType(value, targetType);
+    }
+
+    private sealed class AiPromptDeepRow
+    {
+        public int Id { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string AiUrl { get; set; } = string.Empty;
+        public int JobPostingId { get; set; }
+        public int ResumeId { get; set; }
+        public int AiPromptTemplateId { get; set; }
+        public int PromptDocumentId { get; set; }
+        public int ResponseDocumentId { get; set; }
+
+        public DateTimeOffset JobPostingCreatedAt { get; set; }
+        public DateTimeOffset JobPostingUpdatedAt { get; set; }
+        public string JobPostingTitle { get; set; } = string.Empty;
+        public string JobPostingCompany { get; set; } = string.Empty;
+        public string JobPostingLocation { get; set; } = string.Empty;
+        public string JobPostingSalary { get; set; } = string.Empty;
+        public string JobPostingUrl { get; set; } = string.Empty;
+        public WorkModel JobPostingWorkModel { get; set; }
+        public int JobPostingDocumentId { get; set; }
+        public string JobPostingDocumentTitle { get; set; } = string.Empty;
+        public DocumentType JobPostingDocumentType { get; set; }
+        public string JobPostingDocumentContent { get; set; } = string.Empty;
+        public string? JobPostingDocumentSource { get; set; }
+
+        public DateTimeOffset ResumeCreatedAt { get; set; }
+        public DateTimeOffset ResumeUpdatedAt { get; set; }
+        public string ResumeName { get; set; } = string.Empty;
+        public string ResumeJobTitle { get; set; } = string.Empty;
+        public DateTimeOffset ResumeDate { get; set; }
+        public int ResumeDocumentId { get; set; }
+        public string ResumeDocumentTitle { get; set; } = string.Empty;
+        public DocumentType ResumeDocumentType { get; set; }
+        public string ResumeDocumentContent { get; set; } = string.Empty;
+        public string? ResumeDocumentSource { get; set; }
+
+        public DateTimeOffset AiPromptTemplateCreatedAt { get; set; }
+        public DateTimeOffset AiPromptTemplateUpdatedAt { get; set; }
+        public string AiPromptTemplateName { get; set; } = string.Empty;
+        public string AiPromptTemplateTemplate { get; set; } = string.Empty;
+
+        public string PromptDocumentTitle { get; set; } = string.Empty;
+        public DocumentType PromptDocumentType { get; set; }
+        public string PromptDocumentContent { get; set; } = string.Empty;
+        public string? PromptDocumentSource { get; set; }
+
+        public string ResponseDocumentTitle { get; set; } = string.Empty;
+        public DocumentType ResponseDocumentType { get; set; }
+        public string ResponseDocumentContent { get; set; } = string.Empty;
+        public string? ResponseDocumentSource { get; set; }
     }
 
     private static (List<string> setList, DynamicParameters parameters) BuildUpdateSetList(Dictionary<string, object?> patchFields, FrozenDictionary<string, PropertyInfo> validProperties)

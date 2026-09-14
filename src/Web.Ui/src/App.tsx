@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import { DBViewerTab } from './components/DBViewerTab'
 import { JobPostingsTab } from './components/JobPostingsTab'
 import { ResumeAnalyzerTab } from './components/ResumeAnalyzerTab'
 
@@ -11,6 +12,10 @@ const tabs = [
   {
     id: 'resume-analyzer',
     label: 'Resume Analyzer',
+  },
+  {
+    id: 'db-viewer',
+    label: 'DB Viewer',
   },
 ] as const
 
@@ -116,8 +121,10 @@ function App() {
                 setActiveTab('resume-analyzer')
               }}
             />
-          ) : (
+          ) : activeTab === 'resume-analyzer' ? (
             <ResumeAnalyzerTab jobPosting={selectedJobPosting} />
+          ) : (
+            <DBViewerTab />
           )}
         </div>
       </section>

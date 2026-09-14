@@ -43,9 +43,9 @@ public class BaseController<T> where T : Model
         return group;
     }
 
-    public async Task<IResult> GetAll() => await Controller.GetAll<T>(this.DB);
+    public async Task<IResult> GetAll([Microsoft.AspNetCore.Mvc.FromQuery] bool deep = false) => await Controller.GetAll<T>(this.DB, deep);
 
-    public async Task<IResult> GetById(int id) => await Controller.GetById<T>(id, this.DB);
+    public async Task<IResult> GetById(int id, [Microsoft.AspNetCore.Mvc.FromQuery] bool deep = false) => await Controller.GetById<T>(id, this.DB, deep);
 
     public async Task<IResult> Create(HttpContext context) => await Controller.Create<T>(context, this.RouteNames["GetById"], this.DB);
 
@@ -58,15 +58,15 @@ public class BaseController<T> where T : Model
 
 public class Controller
 {
-    public static async Task<IResult> GetAll<T>(ModelCrud<T> db) where T : Model
+    public static async Task<IResult> GetAll<T>(ModelCrud<T> db, bool deep = false) where T : Model
     {
-        var records = await db.GetAll();
+        var records = await db.GetAll(deep);
         return TypedResults.Ok(records);
     }
 
-    public static async Task<IResult> GetById<T>(int id, ModelCrud<T> db) where T : Model
+    public static async Task<IResult> GetById<T>(int id, ModelCrud<T> db, bool deep = false) where T : Model
     {
-        var record = await db.GetById(id);
+        var record = await db.GetById(id, deep);
 
         if (record == null)
         {
@@ -79,12 +79,10 @@ public class Controller
     // public static async Task<IResult> GetById<T>(int id, ModelCrud<T> db, SqliteConnection connection) where T : Model
     // {
     //     var record = await db.GetById(id, connection);
-    //
     //     if (record == null)
     //     {
     //         return Results.NotFound();
     //     }
-    //
     //     return TypedResults.Ok(record);
     // }
 

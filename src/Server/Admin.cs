@@ -15,11 +15,12 @@ using Microsoft.AspNetCore.Routing;
 
 public class Admin
 {
-    public static RouteGroupBuilder Map(RouteGroupBuilder parent)
+    public static RouteGroupBuilder Map(RouteGroupBuilder parent, WebApplication app)
     {
         var group = parent.MapGroup("/admin");
         group.MapGet("/fix-db-enum-strings", (Delegate)FixDbEnumStrings);
         group.MapPost("/raw-sql", (Delegate)ExecuteRawSql);
+        group.MapGet("/clean-test-db", (Delegate)((HttpContext context) => TestDatabaseFlow.CleanTestDb(context, app.Environment)));
         return group;
     }
 

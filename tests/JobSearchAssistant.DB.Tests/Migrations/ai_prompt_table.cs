@@ -67,7 +67,13 @@ public sealed class ai_prompt_table_Tests : SqliteTestBase
         var template = await new AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "resume-match-template",
-            Template = "Match [YOUR RESUME HERE] against [JOB DESCRIPTION HERE]"
+            Document = new Document
+            {
+                Title = "Resume match template",
+                Type = DocumentType.Markdown,
+                Content = "Match [YOUR RESUME HERE] against [JOB DESCRIPTION HERE]",
+                Source = "ai-prompt-tests"
+            }
         });
         Assert.NotNull(template);
 
@@ -149,7 +155,13 @@ public sealed class ai_prompt_table_Tests : SqliteTestBase
         var template = await new AiPromptTemplates().Create(new AiPromptTemplate
         {
             Name = "trigger-template",
-            Template = "Template content"
+            Document = new Document
+            {
+                Title = "Trigger template",
+                Type = DocumentType.Markdown,
+                Content = "Template content",
+                Source = "ai-prompt-tests"
+            }
         });
         Assert.NotNull(template);
 

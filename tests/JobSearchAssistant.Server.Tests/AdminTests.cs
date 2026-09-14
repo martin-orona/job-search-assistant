@@ -17,7 +17,7 @@ public sealed class AdminTests : SqliteTestBase
         var builder = WebApplication.CreateBuilder();
         using var app = builder.Build();
 
-        global::JobSearchAssistant.Server.Admin.Map(app.MapGroup("/api/v1"));
+        global::JobSearchAssistant.Server.Admin.Map(app.MapGroup("/api/v1"), app);
 
         var endpoints = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(dataSource => dataSource.Endpoints)

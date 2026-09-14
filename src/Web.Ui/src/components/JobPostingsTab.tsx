@@ -41,20 +41,16 @@ type SaveJobPostingRequest = {
   location: string
   salary: string
   workModel: WorkModel
-  source: string
-  markdown: string
+  url: string
+  document: {
+    title: string
+    type: string
+    content: string
+    source: string | null
+  }
 }
 
-type SaveJobPostingResponse = {
-  document: {
-    id: number
-    title: string
-  }
-  jobPosting: {
-    id: number
-    title: string
-  }
-}
+type SaveJobPostingResponse = SavedJobPostingSummary
 
 type SavedJobPostingSummary = {
   id: number
@@ -447,7 +443,8 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
       setSavedJobPostings(await fetchSavedJobPostings())
       setStatus('Saved job postings refreshed.')
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Unable to load saved job postings.')
+      const message = error instanceof Error ? error.message : 'Unable to load saved job postings.'
+      setStatus(`Unable to refresh saved job postings. (${message})`)
     }
   }
 
@@ -585,8 +582,13 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
           location: capturedJobPosting.location,
           salary: capturedJobPosting.salary,
           workModel: capturedJobPosting.workModel,
-          source: capturedJobPosting.source,
-          markdown: markdownContent,
+          url: capturedJobPosting.source,
+          document: {
+            title: capturedJobPosting.title,
+            type: 'Markdown',
+            content: markdownContent,
+            source: capturedJobPosting.source,
+          },
         } satisfies SaveJobPostingRequest),
       })
 
@@ -596,7 +598,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
 
       const saved = (await response.json()) as SaveJobPostingResponse
       setSavedJobPostings(await fetchSavedJobPostings())
-      setStatus(`Saved ${saved.document.title} and job posting ${saved.jobPosting.id}.`)
+      setStatus(`Saved ${saved.title} (${saved.company || 'Unknown company'}).`)
     })().catch((error) => {
       setStatus(error instanceof Error ? error.message : 'Unable to save the job posting.')
     })

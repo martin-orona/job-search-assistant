@@ -145,13 +145,10 @@ The above is rejected — `document.id` (`9`) and `documentId` (`3`) disagree.
 ## Front-End and CSS
 
 - Prefer full descriptive names (`button`) over cryptic abbreviations (`btn`).
-  Abbreviated class names save negligible network payload while increasing code
-  cognitive load.
-- Use BEM-style `--` double-dash delimiters to separate variant and semantic
-  modifier meanings in class names (e.g., `button--primary`, `button--delete`,
-  `button--sm`).
-- Consolidate common component styling into shared utility classes across tabs and
-  components for consistent behavior and appearance.
+  Abbreviated class names save negligible network payload while increasing code cognitive load.
+- Use BEM-style `--` double-dash delimiters to separate variant and semantic modifier meanings in class names (e.g., `button--primary`, `button--delete`).
+- Add ID attributes to the expanders and other elements that take user input, to make it easier to track and test them.
+- Consolidate common component styling into shared utility classes across tabs and components for consistent behavior and appearance.
 
 ## Tests
 
@@ -170,6 +167,15 @@ The above is rejected — `document.id` (`9`) and `documentId` (`3`) disagree.
 - Run the smallest relevant test filter first, then the full affected suite.
 
 ### End to End (e2e)
+
+- End-to-end tests run against a real server and database boundary, not a mocked API layer.
+- Each browser test flow gets a unique identifier so the server can attach the request to a disposable database.
+- Prefer a request header or cookie named for the test flow (header: `X-JSA-Test-Flow` or cookie:`jsa_test_flow`) so a human can also set it manually in the browser when debugging.
+- When the server sees a new test flow id, it creates a new database for that flow and runs the schema/bootstrap setup before the request continues.
+- When the server sees a cleanup signal for that flow id (header:`X-JSA-Test-Cleanup: true` or cookie:`jsa_test_cleanup:true`), it destroys only that flow's database and removes any leftover state for that flow.
+- At startup, delete any leftover databases matching the test prefix so failed or interrupted runs do not pollute the next suite.
+- Only test databases that match a safe prefix, e.g. `jsa_test_`, are eligible for creation or deletion. The real production database must never be targeted by this path.
+- The test middleware should be behind an explicit test/dev guard so production traffic never triggers database creation or teardown.
 
 ## Documentation
 
