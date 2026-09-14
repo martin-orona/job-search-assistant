@@ -137,6 +137,20 @@ The various UI components that have state, remember it so that the next time the
     | Resume Analyzer | #resume-analyzer--resume--editor--content--editor |
     | Resume Analyzer | #resume-analyzer--prompt-template--editor--name |
 
+### Scenario: Database management - startup and shutdown
+
+The JSA uses Sqlite as its database. It is backed up to a well known directory. It is the user's responsibility to backup that directory to a durable backup of their choosing, e.g. OneDrive or Dropbox.
+
+    Given the user uses the JSA
+
+    When the API Server starts up
+
+    Then it copies the database from the Cloud Backup Database Directory to the Local Database Directory
+
+    And When the API Server shuts down
+
+    Then it copies the database from the Local Database Directory to the Cloud Backup Database Directory
+
 ### Scenario: Database management - daily backups
 
 The JSA has a simple strategy to be able to restore the database to an earlier point in time. It maintains a daily backup per day that the JSA runs.

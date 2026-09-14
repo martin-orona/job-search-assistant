@@ -214,8 +214,15 @@ public static class FileLifecycleManager
             return [];
         }
 
-        return Directory.EnumerateFiles(CloudFolder, "JobSearchAssistant.db.*", SearchOption.TopDirectoryOnly)
+        return Directory.EnumerateFiles(CloudFolder, "*", SearchOption.TopDirectoryOnly)
             .Select(file => Path.GetFileName(file) ?? file)
+            .Where(name => name.StartsWith("JobSearchAssistant.db.", StringComparison.OrdinalIgnoreCase))
+            .Where(name => DateTime.TryParseExact(
+                name["JobSearchAssistant.db.".Length..],
+                "yyyy-MM-ddTHH-mm-ssZ",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out _))
             .OrderByDescending(name => name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }

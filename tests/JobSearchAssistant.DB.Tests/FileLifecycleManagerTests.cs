@@ -7,6 +7,47 @@ public sealed class FileLifecycleManagerTests : SqliteTestBase
     }
 
     [Fact]
+    public void SyncFromCloud_CopiesCloudDatabaseToLocal_WhenCloudDatabaseIsNewer()
+    {
+        var cloudDbPath = Path.Combine(FileLifecycleManager.CloudFolder, "JobSearchAssistant.db");
+        var localDbPath = FileLifecycleManager.LocalDbPath;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(localDbPath)!);
+
+        File.WriteAllText(cloudDbPath, "cloud database contents");
+        File.WriteAllText(localDbPath, "stale local database contents");
+
+        var cloudTime = new DateTime(2024, 9, 14, 12, 0, 0, DateTimeKind.Utc);
+        var localTime = new DateTime(2024, 9, 14, 11, 0, 0, DateTimeKind.Utc);
+
+        File.SetLastWriteTimeUtc(cloudDbPath, cloudTime);
+        File.SetLastWriteTimeUtc(localDbPath, localTime);
+
+        FileLifecycleManager.SyncFromCloud(FileLifecycleManager.CloudFolder, FileLifecycleManager.LocalFolder);
+
+        Assert.Equal("cloud database contents", File.ReadAllText(localDbPath));
+    }
+
+    [Fact]
+    public void SyncToCloud_CopiesLocalDatabaseAndCreatesDailySnapshot()
+    {
+        var cloudDbPath = Path.Combine(FileLifecycleManager.CloudFolder, "JobSearchAssistant.db");
+        var localDbPath = FileLifecycleManager.LocalDbPath;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(localDbPath)!);
+        File.WriteAllText(localDbPath, "database contents");
+
+        FileLifecycleManager.SyncToCloud();
+
+        Assert.True(File.Exists(cloudDbPath));
+        Assert.Equal("database contents", File.ReadAllText(cloudDbPath));
+
+        var snapshots = FileLifecycleManager.GetDailyBackupSnapshots();
+        Assert.NotEmpty(snapshots);
+        Assert.All(snapshots, snapshot => Assert.StartsWith("JobSearchAssistant.db.", snapshot));
+    }
+
+    [Fact]
     public void CreateDailyBackupSnapshot_CreatesTimestampedCopy_AndKeepsLatestForThatDay()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(FileLifecycleManager.LocalDbPath)!);
