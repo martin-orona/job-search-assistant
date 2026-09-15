@@ -917,7 +917,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var body = await reader.ReadToEndAsync();
         Assert.Contains("The AI Prompt record could not be deleted because it references a Job Posting", body);
         Assert.Contains("still referenced by other AI Prompt records", body);
-        Assert.Contains("Remove that reference(s) and try again", body);
+        Assert.Contains("Remove that reference(s), or do not select to delete the Job Posting, and try again", body);
 
         using var connection = Database.Connect();
         var promptStillExists = await connection.QuerySingleOrDefaultAsync<int?>("select id from ai_prompt where id = @Id", new { targetPrompt.Id });

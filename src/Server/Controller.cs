@@ -231,6 +231,10 @@ public class Controller
         {
             return TypedResults.InternalServerError(new { error = $"Unable to delete record. Reason: {ex.Message}" });
         }
+        finally
+        {
+            connection?.Dispose();
+        }
     }
 
     private static async Task<string> BuildForeignKeyDeleteMessage(string rootEntityKey, string targetEntityKey, string targetLabel, int rootId, SqliteConnection? connection, string referencingLabel)
@@ -242,7 +246,7 @@ public class Controller
                 ? $", {string.Join(", ", referencingIds.Select(id => $"AI Prompt {id}"))}"
                 : string.Empty;
 
-            return $"The AI Prompt record could not be deleted because it references a Job Posting that is still referenced by other AI Prompt records{referencingList}. Remove that reference(s) and try again.";
+            return $"The AI Prompt record could not be deleted because it references a Job Posting that is still referenced by other AI Prompt records{referencingList}. Remove that reference(s), or do not select to delete the Job Posting, and try again.";
         }
 
         return $"The {targetLabel} record cannot be deleted because it is still referenced by {referencingLabel} records. Delete the {referencingLabel} records first and try again.";

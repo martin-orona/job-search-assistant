@@ -298,6 +298,12 @@ function DBViewerTab() {
   });
   const [error, setError] = useState("");
   const hasInitialLoadRef = useRef(false);
+  const deleteDialogRefs = useRef<Record<EntityKey, HTMLDivElement | null>>({
+    "job-postings": null,
+    resumes: null,
+    "ai-prompt-templates": null,
+    "ai-prompts": null,
+  });
 
   function getDeleteReferences(key: EntityKey, id: number): DeleteReference[] {
     if (key !== "ai-prompts") {
@@ -366,6 +372,28 @@ function DBViewerTab() {
     );
 
     return references;
+  }
+
+  function handleDeleteDialogKeyDown(key: EntityKey, event: React.KeyboardEvent<HTMLDivElement>) {
+    const normalizedKey = event.key.toLowerCase();
+    const confirmKeys = [" ", "enter", "d", "y"];
+    const cancelKeys = ["escape", "c", "n"];
+
+    if (confirmKeys.includes(normalizedKey)) {
+      event.preventDefault();
+      const itemId = deleteDialogState[key]?.itemId;
+      if (itemId === null || itemId === undefined) {
+        return;
+      }
+
+      void confirmDeleteEntityRecord(key, itemId);
+      return;
+    }
+
+    if (cancelKeys.includes(normalizedKey)) {
+      event.preventDefault();
+      closeDeleteDialog(key);
+    }
   }
 
   function openDeleteDialog(key: EntityKey, id: number) {
@@ -628,6 +656,26 @@ function DBViewerTab() {
       loadDbBackups(),
     ]);
   }, []);
+
+  useEffect(() => {
+    const activeKey = (Object.keys(deleteDialogState) as EntityKey[]).find((dialogKey) => {
+      const state = deleteDialogState[dialogKey];
+      return state?.itemId !== null && state?.itemId !== undefined;
+    });
+
+    if (!activeKey) {
+      return;
+    }
+
+    const activeDialog = deleteDialogRefs.current[activeKey];
+    if (!activeDialog) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      activeDialog.focus();
+    });
+  }, [deleteDialogState]);
 
   function getEditorState(key: EntityKey) {
     return editors[key] ?? { isOpen: false, itemId: null, draft: {} };
@@ -1776,7 +1824,17 @@ function DBViewerTab() {
                       const selectedIds = deleteDialogState[entity.key].selectedReferenceIds;
 
                       return (
-                        <div id={entity.deleteDialogId} className="db-viewer-export-dialog" role="dialog" aria-modal="false">
+                        <div
+                          id={entity.deleteDialogId}
+                          className="db-viewer-export-dialog"
+                          role="dialog"
+                          aria-modal="false"
+                          tabIndex={-1}
+                          ref={(node) => {
+                            deleteDialogRefs.current[entity.key] = node;
+                          }}
+                          onKeyDown={(event) => handleDeleteDialogKeyDown(entity.key, event)}
+                        >
                           <div className="db-viewer-export-dialog__header">
                             <strong>Delete {entity.label}</strong>
                           </div>
@@ -1820,7 +1878,7 @@ function DBViewerTab() {
                                 void confirmDeleteEntityRecord(entity.key, deleteDialogState[entity.key].itemId);
                               }}
                             >
-                              Confirm delete
+                              Delete
                             </button>
                             <button
                               id={entity.deleteCancelButtonId}
@@ -1918,7 +1976,7 @@ function DBViewerTab() {
                         void importExportSelection(entity.key, selectedFile);
                       }}
                     >
-                      Confirm import
+                      Import
                     </button>
                     <button
                       id={entity.importCancelButtonId}

@@ -669,10 +669,12 @@ namespace DbViewer {
       await expect(deleteButton).toBeVisible({ timeout: 10000 });
       await deleteButton.click();
 
-      await expect(page.locator("#db-viewer--job-postings--delete-dialog")).toBeVisible({ timeout: 10000 });
-      await page.locator("#db-viewer--job-postings--delete-cancel-button").click();
+      const deleteDialog = page.locator("#db-viewer--job-postings--delete-dialog");
+      await expect(deleteDialog).toBeVisible({ timeout: 10000 });
+      await expect(deleteDialog).toBeFocused();
+      await page.keyboard.press("Escape");
 
-      await expect(page.locator("#db-viewer--job-postings--delete-dialog")).toBeHidden();
+      await expect(deleteDialog).toBeHidden();
       await expect
         .poll(
           async () => {
@@ -685,6 +687,59 @@ namespace DbViewer {
 
             const records = await response.json();
             return records.some((record: any) => Number(record.id) === recordId);
+          },
+          { timeout: 10000 },
+        )
+        .toBeTruthy();
+    });
+
+    test("Scenario: Deleting a record can be confirmed with the keyboard", async ({ page }, testInfo) => {
+      const flowHeaders = getTestHeaders(testInfo);
+      const seed = {
+        title: "Keyboard Confirm Engineer",
+        company: "Keyboard Co",
+        location: "Remote",
+        salary: "$120,000",
+        workModel: "Remote",
+        url: "https://example.com/job/keyboard-confirm",
+        document: {
+          title: "Keyboard Confirm Engineer",
+          type: "markdown",
+          content: "# Keyboard Confirm Engineer",
+          source: "https://example.com/job/keyboard-confirm",
+        },
+      };
+
+      const seedResponse = await callServer({ page, testInfo, route: "job-postings", method: "POST", data: seed });
+      const recordId = Number(seedResponse.json.id);
+      expect(recordId > 0, "The seed record must exist before testing keyboard confirmation.").toBeTruthy();
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+      await page.locator("#db-viewer--job-postings--container--summary").click();
+
+      const deleteButton = page.locator(`#db-viewer--job-postings--delete-button--record-${recordId}`);
+      await expect(deleteButton).toBeVisible({ timeout: 10000 });
+      await deleteButton.click();
+
+      const deleteDialog = page.locator("#db-viewer--job-postings--delete-dialog");
+      await expect(deleteDialog).toBeVisible({ timeout: 10000 });
+      await expect(deleteDialog).toBeFocused();
+      await page.keyboard.press("d");
+
+      await expect(deleteDialog).toBeHidden();
+      await expect
+        .poll(
+          async () => {
+            const response = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", {
+              headers: flowHeaders,
+            });
+            if (!(await response.ok())) {
+              return false;
+            }
+
+            const records = await response.json();
+            return !records.some((record: any) => Number(record.id) === recordId);
           },
           { timeout: 10000 },
         )
@@ -777,7 +832,7 @@ namespace DbViewer {
 
       await expect(deleteDialog).toContainText("AI Prompt records", { timeout: 10000 });
       await expect(deleteDialog).toContainText("Delete the AI Prompt records first", { timeout: 10000 });
-      await expect(deleteDialog.getByRole("button", { name: "Confirm delete" })).toHaveCount(0);
+      await expect(deleteDialog.getByRole("button", { name: "Delete" })).toHaveCount(0);
       await expect(deleteDialog.getByRole("button", { name: "Dismiss" })).toBeVisible({ timeout: 10000 });
 
       await expect
