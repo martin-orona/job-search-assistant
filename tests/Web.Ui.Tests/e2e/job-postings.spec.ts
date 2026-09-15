@@ -5,16 +5,19 @@ import {
   generateExpanderStateTests,
   generateInputStateTests,
   initiateDbViewerTestFlow,
+  resetPersistedUiState,
 } from "./helpers";
 
 test.describe("Feature: Job Postings", () => {
   test.beforeEach(async ({ page, context, browser, request }, testInfo) => {
     console.log("Setting up for test:", testInfo.title, testInfo.testId);
+    await resetPersistedUiState(page);
     await initiateDbViewerTestFlow(page, testInfo);
     await cleanupDbViewerTestFlow(page, testInfo);
   });
 
   test.afterEach(async ({ page }, testInfo) => {
+    await resetPersistedUiState(page);
     await cleanupDbViewerTestFlow(page, testInfo);
   });
 
@@ -69,12 +72,11 @@ test.describe("Feature: Job Postings", () => {
     });
     expect(seedResponse.ok, "The seeded job posting must be created before navigating to it.").toBeTruthy();
 
-    // Mock the browser extension bridge to handle OPEN_URL_VISIBLE by opening a tab
+    // Mock the browser extension bridge to resolve OPEN_URL_VISIBLE without requiring a real popup event.
     await page.addInitScript(() => {
       window.addEventListener("message", (event) => {
         const data = event.data;
         if (data?.source === "job-search-assistant-web-ui" && data.type === "OPEN_URL_VISIBLE") {
-          window.open(data.url, "_blank");
           window.postMessage(
             {
               source: "job-search-assistant-extension",
@@ -99,20 +101,9 @@ test.describe("Feature: Job Postings", () => {
     const urlInput = page.getByLabel("Posting URL");
     await urlInput.fill(jobPostingUrl);
 
-    // And clicks on the Go button
-    const popupPromise = page.waitForEvent("popup");
+    // And clicks on the Go button, the app confirms the extension accepted the URL and updates the status.
     await page.getByRole("button", { name: "Go", exact: true }).click();
-    const newPage = await popupPromise;
 
-    // Then the browser will open a new tab to the job posting URL
-    await expect.poll(() => newPage.url()).toBe(jobPostingUrl);
-
-    // And the focus will be placed on the new tab so that the user can see the job posting
-    await newPage.bringToFront();
-    await expect.poll(() => newPage.evaluate(() => document.visibilityState)).toBe("visible");
-
-    // When the user switches back to the JSA tab, the status indicates the page was opened.
-    await page.bringToFront();
     await expect
       .poll(async () => await page.locator(".job-postings-status").textContent(), {
         timeout: 10000,
@@ -151,7 +142,8 @@ test.describe("Feature: Job Postings", () => {
     const sampleText =
       "Senior Software Engineer\nAcme Corp\nRemote\n$150,000 - $180,000 a year\nWe are seeking a Senior Software Engineer to build modern web applications.";
 
-    // Mock the extension bridge for OPEN_URL_VISIBLE and CAPTURE_TAB_BY_URL
+    // Mock the extension bridge for OPEN_URL_VISIBLE and CAPTURE_TAB_BY_URL.
+    // The Go flow uses browser messaging, not a real popup window.
     await page.addInitScript(
       ({ expectedUrl, html, text }) => {
         window.addEventListener("message", (event) => {
@@ -161,7 +153,6 @@ test.describe("Feature: Job Postings", () => {
           }
 
           if (data.type === "OPEN_URL_VISIBLE") {
-            window.open(data.url, "_blank");
             window.postMessage(
               {
                 source: "job-search-assistant-extension",
@@ -205,10 +196,7 @@ test.describe("Feature: Job Postings", () => {
     const urlInput = page.getByLabel("Posting URL");
     await urlInput.fill(jobPostingUrl);
 
-    const popupPromise = page.waitForEvent("popup");
     await page.getByRole("button", { name: "Go", exact: true }).click();
-    const newPage = await popupPromise;
-    expect(newPage.url()).toBe(jobPostingUrl);
     await expect(page.locator(".job-postings-status")).toContainText(`Opened ${jobPostingUrl}`);
 
     // When the user clicks on the Capture button
@@ -250,7 +238,6 @@ test.describe("Feature: Job Postings", () => {
           }
 
           if (data.type === "OPEN_URL_VISIBLE") {
-            window.open(data.url, "_blank");
             window.postMessage(
               {
                 source: "job-search-assistant-extension",
@@ -302,10 +289,8 @@ test.describe("Feature: Job Postings", () => {
     const urlInput = page.getByLabel("Posting URL");
     await urlInput.fill(jobPostingUrl);
 
-    const popupPromise = page.waitForEvent("popup");
     await page.getByRole("button", { name: "Go", exact: true }).click();
-    const newPage = await popupPromise;
-    expect(newPage.url()).toBe(jobPostingUrl);
+    await expect(page.locator(".job-postings-status")).toContainText(`Opened ${jobPostingUrl}`);
 
     await page.getByRole("button", { name: "Capture", exact: true }).click();
     await expect(page.locator(".job-postings-status")).toContainText("Captured Senior Software Engineer.");

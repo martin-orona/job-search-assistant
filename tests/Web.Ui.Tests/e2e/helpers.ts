@@ -8,9 +8,54 @@ function getTabTarget(page: Parameters<typeof test>[0]["page"], tabTarget: strin
   return page.getByRole("tab", { name: tabTarget });
 }
 
+const jobPostingsExpanderStorageKeyMap: Record<string, string> = {
+  "#job-postings--capture--container": "job-post-capture-open",
+  "#job-postings--job-post-page--container": "job-post-page-open",
+  "#job-postings--formatted-content--container": "job-post-formatted-open",
+  "#job-postings--markdown-content--container": "job-post-markdown-open",
+  "#job-postings--saved-job-postings--container": "job-post-saved-open",
+};
+
+const resumeAnalyzerExpanderStateMap: Record<string, string> = {
+  "#resume-analyzer--ai-prompt--container": "aiPrompt",
+  "#resume-analyzer--ai-prompt--editor--prompt--container": "aiPromptContent",
+  "#resume-analyzer--ai-prompt--editor--ai-response--container": "aiResponseContent",
+  "#resume-analyzer--ai-prompt--saved-ai-prompts--container": "savedAiPrompts",
+  "#resume-analyzer--job-description--container": "jobDescription",
+  "#resume-analyzer--job-description--content--container": "jobDescriptionContent",
+  "#resume-analyzer--resume--container": "resume",
+  "#resume-analyzer--resume--editor--content--container": "resumeContent",
+  "#resume-analyzer--saved-resumes--container": "savedResumes",
+  "#resume-analyzer--prompt-template--container": "promptTemplate",
+  "#resume-analyzer--prompt-template--editor--content--container": "promptTemplateContent",
+  "#resume-analyzer--saved-prompt-templates--container": "savedTemplates",
+};
+
+function getExpanderStorageTarget(selector: string) {
+  if (selector in jobPostingsExpanderStorageKeyMap) {
+    return {
+      storageKey: jobPostingsExpanderStorageKeyMap[selector],
+      stateProperty: null,
+    };
+  }
+
+  if (selector in resumeAnalyzerExpanderStateMap) {
+    return {
+      storageKey: "jobSearchAssistant.resumeAnalyzer.expanders",
+      stateProperty: resumeAnalyzerExpanderStateMap[selector],
+    };
+  }
+
+  return {
+    storageKey: selector.replace(/^#/, ""),
+    stateProperty: null,
+  };
+}
+
 export function generateExpanderStateTests(expanderSelectors: string[], tabTarget: string) {
   for (const expanderSelector of expanderSelectors) {
     test(`Scenario: ${expanderSelector} - Expander restores its toggled state`, async ({ page }) => {
+      await resetPersistedUiState(page);
       await page.goto("/");
 
       const tab = getTabTarget(page, tabTarget);
@@ -61,6 +106,34 @@ export function generateExpanderStateTests(expanderSelectors: string[], tabTarge
       ).not.toHaveAttribute("open");
     }
 
+    const { storageKey, stateProperty } = getExpanderStorageTarget(selector);
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            ({ key, property }) => {
+              const raw = window.localStorage.getItem(key);
+              if (!raw) {
+                return null;
+              }
+
+              if (property) {
+                try {
+                  const parsed = JSON.parse(raw) as Record<string, unknown>;
+                  return parsed[property] == null ? null : String(parsed[property]);
+                } catch {
+                  return null;
+                }
+              }
+
+              return raw;
+            },
+            { key: storageKey, property: stateProperty },
+          ),
+        { timeout: 5000 },
+      )
+      .toBe(String(targetStateIsOpen));
+
     await page.reload();
 
     if (targetStateIsOpen) {
@@ -80,6 +153,7 @@ export function generateExpanderStateTests(expanderSelectors: string[], tabTarge
 export function generateInputStateTests(inputSelectors: string[], tabTarget: string) {
   for (const inputSelector of inputSelectors) {
     test(`Scenario: ${inputSelector} - Input restores its value`, async ({ page }) => {
+      await resetPersistedUiState(page);
       await page.goto("/");
 
       const tab = getTabTarget(page, tabTarget);
@@ -194,6 +268,52 @@ export function generateInputStateTests(inputSelectors: string[], tabTarget: str
   }
 }
 
+export async function resetPersistedUiState(page: Parameters<typeof test>[0]["page"]) {
+  try {
+    await page.unrouteAll();
+  } catch {
+    // Ignore route cleanup failures in browsers that are not fully initialized yet.
+  }
+
+  try {
+    await page.context().clearCookies();
+  } catch {
+    // Ignore cookie access failures when the page context is not ready.
+  }
+
+  await page.evaluate(async () => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+      if (window.name) {
+        window.name = "";
+      }
+    } catch {
+      // Ignore storage access errors in browsers that are not fully initialized yet.
+    }
+
+    try {
+      const databaseNames = await indexedDB.databases();
+      for (const db of databaseNames) {
+        if (db.name) {
+          indexedDB.deleteDatabase(db.name);
+        }
+      }
+    } catch {
+      // Ignore IndexedDB cleanup failures in browsers that do not expose the API yet.
+    }
+
+    try {
+      const cacheNames = await caches.keys();
+      for (const cacheName of cacheNames) {
+        await caches.delete(cacheName);
+      }
+    } catch {
+      // Ignore cache storage failures if the browser does not expose the API.
+    }
+  });
+}
+
 export async function initiateDbViewerTestFlow(page: any, testInfo: TestInfo) {
   const headers = getTestHeaders(testInfo);
   await page.setExtraHTTPHeaders(headers);
@@ -217,7 +337,13 @@ export async function cleanupDbViewerTestFlow(page: any, testInfo: TestInfo) {
 
 export function getTestHeaders(testInfo: TestInfo) {
   const testPath = testInfo.titlePath.join(" > ");
+  const fileName = (testInfo.file ?? "unknown-test-file").replace(/\\/g, "/");
   const testTitle = testPath
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-")
+    .toLowerCase();
+  const fileToken = fileName
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-+/g, "-")
@@ -228,11 +354,14 @@ export function getTestHeaders(testInfo: TestInfo) {
     .replace(/-+/g, "-")
     .toLowerCase();
 
-  const cacheKey = `${projectName}:${testTitle}`;
-  const globalCache = (globalThis as typeof globalThis & { __jsaTestFlowHeaders?: Map<string, string> }).__jsaTestFlowHeaders ??= new Map<string, string>();
+  const cacheKey = `${projectName}:${fileToken}:${testTitle}`;
+  const globalCache = ((globalThis as typeof globalThis & { __jsaTestFlowHeaders?: Map<string, string> }).__jsaTestFlowHeaders ??= new Map<
+    string,
+    string
+  >());
   if (!globalCache.has(cacheKey)) {
     const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const flowId = `${projectName}-${testTitle}-${uniqueSuffix}`;
+    const flowId = `${projectName}-${fileToken}-${testTitle}-${uniqueSuffix}`;
     const cappedFlowId = flowId.length > 80 ? `${flowId.slice(0, 70)}-${Math.random().toString(36).slice(2, 8)}` : flowId;
     globalCache.set(cacheKey, cappedFlowId);
   }
