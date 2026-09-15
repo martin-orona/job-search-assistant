@@ -2,11 +2,17 @@ namespace JobSearchAssistant.Server;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+
+using Dapper;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Data.Sqlite;
+
+using JobSearchAssistant.DB;
 
 using JobSearchAssistant.Core;
 using JobSearchAssistant.DB.Models;
@@ -39,7 +45,7 @@ public class BaseController<T> where T : Model
         group.MapPost("/", (Delegate)this.Create);
         group.MapPut("/{id:int}", this.Update);
         group.MapPatch("/{id:int}", this.Patch);
-        group.MapDelete("/{id:int}", this.Delete);
+        group.MapDelete("/{id:int}", (int id, HttpContext context) => this.Delete(id, context));
         return group;
     }
 
@@ -54,6 +60,8 @@ public class BaseController<T> where T : Model
     public async Task<IResult> Patch(int id, HttpContext context) => await Controller.Patch<T>(id, context, this.DB);
 
     public async Task<IResult> Delete(int id) => await Controller.Delete<T>(id, this.DB);
+
+    public async Task<IResult> Delete(int id, HttpContext context) => await Controller.Delete<T>(id, context, this.DB);
 }
 
 public class Controller
@@ -171,19 +179,49 @@ public class Controller
 
     public static async Task<IResult> Delete<T>(int id, ModelCrud<T> db) where T : Model
     {
+        return await Delete<T>(id, null, db);
+    }
+
+    public static async Task<IResult> Delete<T>(int id, HttpContext? context, ModelCrud<T> db) where T : Model
+    {
+        var include = await ParseDeleteRequestAsync(context);
+        var rootEntityKey = GetEntityKeyForType(typeof(T));
+        var attemptedEntityKey = rootEntityKey;
+        SqliteConnection? connection = null;
+
         try
         {
-            var record = await db.Delete(id);
-            if (record == null)
+            connection = Database.Connect();
+            using var transaction = await connection.BeginTransactionAsync();
+
+            await DeleteTargetAsync(rootEntityKey, id, connection);
+
+            foreach (var item in include)
             {
-                return Results.NotFound();
+                attemptedEntityKey = item.Entity;
+                await DeleteTargetAsync(item.Entity, item.Id, connection);
             }
 
-            return TypedResults.Ok(record);
+            await transaction.CommitAsync();
+
+            return TypedResults.Ok(new { deleted = new[] { new { entity = rootEntityKey, id } }.Concat(include.Select(i => new { entity = i.Entity, id = i.Id })) });
         }
         catch (NotFoundException ex)
         {
             return Results.NotFound(new { error = ex.Message });
+        }
+        catch (SqliteException ex) when (IsForeignKeyFailure(ex))
+        {
+            var targetEntityKey = attemptedEntityKey;
+            var targetLabel = GetUserFriendlyEntityName(targetEntityKey);
+            var referencingLabel = GetReferencingEntityLabel(targetEntityKey);
+            var errorMessage = await BuildForeignKeyDeleteMessage(rootEntityKey, targetEntityKey, targetLabel, id, connection, referencingLabel);
+            return TypedResults.BadRequest(new
+            {
+                error = errorMessage,
+                entity = targetEntityKey,
+                referencedBy = referencingLabel,
+            });
         }
         catch (ValidationException ex)
         {
@@ -193,6 +231,216 @@ public class Controller
         {
             return TypedResults.InternalServerError(new { error = $"Unable to delete record. Reason: {ex.Message}" });
         }
+    }
+
+    private static async Task<string> BuildForeignKeyDeleteMessage(string rootEntityKey, string targetEntityKey, string targetLabel, int rootId, SqliteConnection? connection, string referencingLabel)
+    {
+        if (rootEntityKey == "ai-prompts" && targetEntityKey == "job-postings")
+        {
+            var referencingIds = (await GetReferencingAiPromptIdsAsync(connection, rootId)).ToList();
+            var referencingList = referencingIds.Count > 0
+                ? $", {string.Join(", ", referencingIds.Select(id => $"AI Prompt {id}"))}"
+                : string.Empty;
+
+            return $"The AI Prompt record could not be deleted because it references a Job Posting that is still referenced by other AI Prompt records{referencingList}. Remove that reference(s) and try again.";
+        }
+
+        return $"The {targetLabel} record cannot be deleted because it is still referenced by {referencingLabel} records. Delete the {referencingLabel} records first and try again.";
+    }
+
+    private static async Task<IEnumerable<int>> GetReferencingAiPromptIdsAsync(SqliteConnection? connection, int promptId)
+    {
+        if (connection == null || promptId <= 0)
+        {
+            return Enumerable.Empty<int>();
+        }
+
+        var jobPostingId = await connection.QuerySingleOrDefaultAsync<int?>(
+            "select job_posting_id from ai_prompt where id = @PromptId",
+            new { PromptId = promptId });
+
+        if (jobPostingId is null or <= 0)
+        {
+            return Enumerable.Empty<int>();
+        }
+
+        return await connection.QueryAsync<int>(
+            "select id from ai_prompt where job_posting_id = @JobPostingId and id != @PromptId order by id",
+            new { JobPostingId = jobPostingId.Value, PromptId = promptId });
+    }
+
+    private static bool IsForeignKeyFailure(Microsoft.Data.Sqlite.SqliteException ex)
+    {
+        var message = ex.Message ?? string.Empty;
+        return message.Contains("FOREIGN KEY", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("foreign key", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("constraint", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("REFERENCES", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetEntityKeyForType(Type type)
+    {
+        if (type == typeof(JobPosting))
+        {
+            return "job-postings";
+        }
+
+        if (type == typeof(Resume))
+        {
+            return "resumes";
+        }
+
+        if (type == typeof(AiPromptTemplate))
+        {
+            return "ai-prompt-templates";
+        }
+
+        if (type == typeof(AiPrompt))
+        {
+            return "ai-prompts";
+        }
+
+        if (type == typeof(Document))
+        {
+            return "documents";
+        }
+
+        return type.Name;
+    }
+
+    private static string GetUserFriendlyEntityName(string entityKey)
+    {
+        return entityKey switch
+        {
+            "job-postings" => "Job Posting",
+            "resumes" => "Resume",
+            "ai-prompt-templates" => "AI Prompt Template",
+            "ai-prompts" => "AI Prompt",
+            "documents" => "Document",
+            _ => entityKey,
+        };
+    }
+
+    private static string GetReferencingEntityLabel(string entityKey)
+    {
+        return entityKey switch
+        {
+            "job-postings" => "AI Prompt",
+            "resumes" => "AI Prompt",
+            "ai-prompt-templates" => "AI Prompt",
+            "documents" => "Job Posting, Resume, AI Prompt Template, or AI Prompt",
+            _ => "other",
+        };
+    }
+
+    private static async Task<List<(string Entity, int Id)>> ParseDeleteRequestAsync(HttpContext? context)
+    {
+        if (context == null || context.Request.ContentLength is <= 0)
+        {
+            return new List<(string Entity, int Id)>();
+        }
+
+        try
+        {
+            var payload = await context.Request.ReadFromJsonAsync<DeleteRequestPayload>();
+            if (payload?.Include == null)
+            {
+                return new List<(string Entity, int Id)>();
+            }
+
+            return payload.Include
+                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Entity) && item.Id > 0)
+                .Select(item => (NormalizeEntityKey(item.Entity!), item.Id))
+                .Distinct()
+                .ToList();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return new List<(string Entity, int Id)>();
+        }
+    }
+
+    private static string NormalizeEntityKey(string entity)
+    {
+        var normalized = entity.Trim();
+        return normalized switch
+        {
+            "job-posting" => "job-postings",
+            "job_posting" => "job-postings",
+            "job-postings" => "job-postings",
+            "resume" => "resumes",
+            "resumes" => "resumes",
+            "ai-prompt-template" => "ai-prompt-templates",
+            "ai_prompt_template" => "ai-prompt-templates",
+            "ai-prompt-templates" => "ai-prompt-templates",
+            "ai-prompt" => "ai-prompts",
+            "ai_prompt" => "ai-prompts",
+            "ai-prompts" => "ai-prompts",
+            "document" => "documents",
+            "documents" => "documents",
+            _ => normalized,
+        };
+    }
+
+    private static async Task DeleteTargetAsync(string entity, int id, SqliteConnection connection)
+    {
+        if (id <= 0)
+        {
+            return;
+        }
+
+        switch (entity)
+        {
+            case "job-postings":
+                var jobPosting = await new JobSearchAssistant.DB.Services.JobPostings().Delete(id, connection);
+                if (jobPosting == null)
+                {
+                    throw new NotFoundException($"Record [{id}] not found in [job-postings].");
+                }
+                break;
+            case "resumes":
+                var resume = await new JobSearchAssistant.DB.Services.Resumes().Delete(id, connection);
+                if (resume == null)
+                {
+                    throw new NotFoundException($"Record [{id}] not found in [resumes].");
+                }
+                break;
+            case "ai-prompt-templates":
+                var template = await new JobSearchAssistant.DB.Services.AiPromptTemplates().Delete(id, connection);
+                if (template == null)
+                {
+                    throw new NotFoundException($"Record [{id}] not found in [ai-prompt-templates].");
+                }
+                break;
+            case "ai-prompts":
+                var prompt = await new JobSearchAssistant.DB.Services.AiPrompts().Delete(id, connection);
+                if (prompt == null)
+                {
+                    throw new NotFoundException($"Record [{id}] not found in [ai-prompts].");
+                }
+                break;
+            case "documents":
+                var document = await new JobSearchAssistant.DB.Services.Documents().Delete(id, connection);
+                if (document == null)
+                {
+                    throw new NotFoundException($"Record [{id}] not found in [documents].");
+                }
+                break;
+            default:
+                throw new ValidationException($"Unsupported delete target [{entity}]", Array.Empty<ValidationError>());
+        }
+    }
+
+    private sealed class DeleteRequestPayload
+    {
+        public List<DeleteRequestItem>? Include { get; set; }
+    }
+
+    private sealed class DeleteRequestItem
+    {
+        public string? Entity { get; set; }
+
+        public int Id { get; set; }
     }
 
     // public static async Task<IResult> Delete<T>(int id, ModelCrud<T> db, SqliteConnection connection) where T : Model

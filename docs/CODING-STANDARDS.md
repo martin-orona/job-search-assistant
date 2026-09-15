@@ -38,31 +38,26 @@ refactoring.
 - The CRUD layer persists nested model properties in one database transaction.
   Splitting a workflow into multiple create calls breaks that atomicity and can
   leave orphaned records when a later call fails.
-- When changing persistence representation, add a numbered migration that
-  converts existing values and keeps legacy reads safe where practical.
-- Add a regression test that checks the raw stored representation, not only the
-  round-tripped model value.
-
-### Create-path object graph contract
-
-A child object means create it; a foreign key id means link to it. Sending a
-child model at creation time is a request to insert that child, so exactly one
-of the child object or the `{PropertyName}Id` foreign key may be supplied, and
-a supplied child object must be new — its `Id` must not be set.
-
-**ID Validation Rule:** All ID values (primary keys and foreign keys) must be greater than 0 if provided.
+- Delete workflows must also be atomic. Multi-record or cascade deletes must be
+  handled in the server-side transaction, not by a UI that fires several delete
+  requests in sequence. A failed middle step must roll back the entire operation
+  so the database stays consistent.
+- When a delete is rejected by a foreign-key or validation rule, the server must
+  return a user-facing error that identifies the relevant entity or record so the
+  user knows what to resolve. The UI should only present the server error; it
+  should not continue a partial delete flow after a failed step.
 
 - A child object must have `Id == 0` (new record) or `Id > 0` with no parent link attempt (error).
 - A foreign key ID of `0` means "not provided"; FK IDs in create mode must be `> 0` if using the FK path.
 - Negative ID values (`< 0`) are always invalid and rejected during validation.
 
-| Nested object | Foreign key id | Result |
-| --- | --- | --- |
-| absent | not set | Error — neither was provided |
-| present, `Id` not set | not set | Valid — the child is created |
-| absent | `7` | Valid — links to existing record `7` |
-| present, `Id` not set | `7` | Error — only one may be provided |
-| present, `Id` is set | any | Error — a child object may not carry an `Id` |
+| Nested object         | Foreign key id | Result                                       |
+| --------------------- | -------------- | -------------------------------------------- |
+| absent                | not set        | Error — neither was provided                 |
+| present, `Id` not set | not set        | Valid — the child is created                 |
+| absent                | `7`            | Valid — links to existing record `7`         |
+| present, `Id` not set | `7`            | Error — only one may be provided             |
+| present, `Id` is set  | any            | Error — a child object may not carry an `Id` |
 
 Creating the child, and linking to an existing one:
 
@@ -157,6 +152,7 @@ The above is rejected — `document.id` (`9`) and `documentId` (`3`) disagree.
 - Put end to end tests under `/tests/Web.Ui.Tests/e2e/`.
 
 ### General
+
 - Follow the existing xUnit naming and fixture patterns.
 - Test both the public behavior and important storage details when persistence
   is involved.

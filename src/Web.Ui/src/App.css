@@ -146,14 +146,18 @@
 
 .button--delete {
   border-color: var(--border);
+  border-color: var(--color-danger);
   background: transparent;
   color: var(--text);
+  color: var(--color-danger);
 }
 
 .button--delete:hover {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.5);
+  /* border-color: rgba(239, 68, 68, 0.5); */
+  border-color: var(--color-danger-hover);
+  color: var(--text-h);
 }
 
 .button--delete:active {
@@ -378,6 +382,15 @@
   animation: db-viewer-list-item-flash 1.8s ease-out;
 }
 
+.db-viewer-list-item--removing {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(12px);
+  border-color: rgba(239, 68, 68, 0.7);
+  background: rgba(239, 68, 68, 0.08);
+  animation: db-viewer-list-item-remove 220ms ease-out forwards;
+}
+
 @keyframes db-viewer-list-item-flash {
   0% {
     box-shadow: 0 0 0 0 var(--highlight-glow);
@@ -387,6 +400,23 @@
   }
   100% {
     box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes db-viewer-list-item-remove {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 230px;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(12px);
+    max-height: 0;
+    margin: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
   }
 }
 
@@ -410,6 +440,13 @@
   align-self: flex-start;
   margin-left: auto;
   padding: 2px 10px;
+}
+
+.db-viewer-list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .db-viewer-list-item-copy strong,

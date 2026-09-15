@@ -98,6 +98,12 @@ type RecordReference = {
   targetEntity: { key: EntityKey; recordId: (id: number) => string };
 };
 
+type DeleteReference = {
+  id: number;
+  label: string;
+  entityKey: EntityKey;
+};
+
 type EntityConfig<T> = {
   key: EntityKey;
   label: string;
@@ -111,6 +117,10 @@ type EntityConfig<T> = {
   refreshStatusId: string;
   listId: string;
   refreshButtonId: string;
+  deleteDialogId: string;
+  deleteConfirmButtonId: string;
+  deleteCancelButtonId: string;
+  deleteReferenceCheckboxId: (entityKey: EntityKey, id: number) => string;
   recordId: (id: number) => string;
   recordControlId: (id: number, controlName: string) => string;
   editorId: string;
@@ -274,8 +284,282 @@ function DBViewerTab() {
     "ai-prompt-templates": "",
     "ai-prompts": "",
   });
+  const [deleteDialogState, setDeleteDialogState] = useState<Record<EntityKey, { itemId: number | null; selectedReferenceIds: string[] }>>({
+    "job-postings": { itemId: null, selectedReferenceIds: [] },
+    resumes: { itemId: null, selectedReferenceIds: [] },
+    "ai-prompt-templates": { itemId: null, selectedReferenceIds: [] },
+    "ai-prompts": { itemId: null, selectedReferenceIds: [] },
+  });
+  const [deleteFailureState, setDeleteFailureState] = useState<Record<EntityKey, { itemId: number | null; message: string }>>({
+    "job-postings": { itemId: null, message: "" },
+    resumes: { itemId: null, message: "" },
+    "ai-prompt-templates": { itemId: null, message: "" },
+    "ai-prompts": { itemId: null, message: "" },
+  });
   const [error, setError] = useState("");
   const hasInitialLoadRef = useRef(false);
+
+  function getDeleteReferences(key: EntityKey, id: number): DeleteReference[] {
+    if (key !== "ai-prompts") {
+      return [];
+    }
+
+    const prompt = aiPrompts.find((item) => item.id === id);
+    if (!prompt) {
+      return [];
+    }
+
+    const references: DeleteReference[] = [];
+
+    const addReference = (
+      entityKey: EntityKey,
+      record:
+        | {
+            id?: number;
+            title?: string;
+            name?: string;
+            company?: string;
+            jobTitle?: string;
+            location?: string;
+            salary?: string;
+            workModel?: string;
+          }
+        | null
+        | undefined,
+      labelBuilder: (record: {
+        id?: number;
+        title?: string;
+        name?: string;
+        company?: string;
+        jobTitle?: string;
+        location?: string;
+        salary?: string;
+        workModel?: string;
+      }) => string,
+    ) => {
+      if (!record || Number(record.id ?? 0) <= 0) {
+        return;
+      }
+
+      references.push({
+        id: Number(record.id ?? 0),
+        label: labelBuilder(record),
+        entityKey,
+      });
+    };
+
+    const jobPosting = prompt.jobPosting;
+    addReference(
+      "job-postings",
+      jobPosting,
+      (record) => `${record.title || "Untitled job posting"} (Job Posting ${record.id ?? prompt.jobPostingId})`,
+    );
+
+    const resume = prompt.resume;
+    addReference("resumes", resume, (record) => `${record.name || "Untitled resume"} (Resume ${record.id ?? prompt.resumeId})`);
+
+    const template = prompt.aiPromptTemplate;
+    addReference(
+      "ai-prompt-templates",
+      template,
+      (record) => `${record.name || "Untitled AI prompt template"} (AI Prompt Template ${record.id ?? prompt.aiPromptTemplateId})`,
+    );
+
+    return references;
+  }
+
+  function openDeleteDialog(key: EntityKey, id: number) {
+    const references = getDeleteReferences(key, id);
+    setDeleteDialogState((current) => ({
+      ...current,
+      [key]: {
+        itemId: id,
+        selectedReferenceIds: references.map((reference) => buildDeleteSelectionKey(reference.entityKey, reference.id)),
+      },
+    }));
+    setError("");
+  }
+
+  function buildDeleteSelectionKey(entityKey: EntityKey, id: number): string {
+    return `${entityKey}:${id}`;
+  }
+
+  function toggleDeleteReferenceSelection(key: EntityKey, reference: DeleteReference) {
+    setDeleteDialogState((current) => {
+      const active = current[key] ?? { itemId: null, selectedReferenceIds: [] };
+      const selectionKey = buildDeleteSelectionKey(reference.entityKey, reference.id);
+      const nextSelection = active.selectedReferenceIds.includes(selectionKey)
+        ? active.selectedReferenceIds.filter((selectedId) => selectedId !== selectionKey)
+        : [...active.selectedReferenceIds, selectionKey];
+
+      return {
+        ...current,
+        [key]: {
+          ...active,
+          selectedReferenceIds: nextSelection,
+        },
+      };
+    });
+  }
+
+  function closeDeleteDialog(key: EntityKey) {
+    setDeleteDialogState((current) => ({
+      ...current,
+      [key]: { itemId: null, selectedReferenceIds: [] },
+    }));
+    setDeleteFailureState((current) => ({
+      ...current,
+      [key]: { itemId: null, message: "" },
+    }));
+    setError("");
+  }
+
+  function getDeleteRoute(key: EntityKey): string {
+    switch (key) {
+      case "job-postings":
+        return "/api/v1/job-postings";
+      case "resumes":
+        return "/api/v1/resumes";
+      case "ai-prompt-templates":
+        return "/api/v1/ai-prompt-templates";
+      case "ai-prompts":
+        return "/api/v1/ai-prompts";
+      default:
+        return "/api/v1/ai-prompts";
+    }
+  }
+
+  function getDeleteFailureMessage(message: string, fallback: string): string {
+    const normalized = message.toLowerCase();
+    if (normalized.includes("foreign key") || normalized.includes("referenced by other records") || normalized.includes("constraint")) {
+      return message || "This record cannot be deleted because it is being referenced by other records.";
+    }
+
+    return message || fallback;
+  }
+
+  function renderDeleteFailureMessage(message: string): React.ReactNode {
+    const pattern = /AI Prompt \d+/gi;
+    const matches = [...message.matchAll(pattern)];
+    if (matches.length === 0) {
+      return message;
+    }
+
+    const nodes: React.ReactNode[] = [];
+    let cursor = 0;
+
+    matches.forEach((match, index) => {
+      const matchIndex = match.index ?? 0;
+      if (matchIndex > cursor) {
+        nodes.push(message.slice(cursor, matchIndex));
+      }
+
+      const promptId = Number.parseInt(match[0].replace(/^AI Prompt /i, ""), 10);
+      if (Number.isFinite(promptId) && promptId > 0) {
+        nodes.push(
+          <a
+            key={`ai-prompt-link-${promptId}-${index}`}
+            className="db-viewer-list-item-read-header-link"
+            href={`#${entityConfigs["ai-prompts"].recordId(promptId)}`}
+            onClick={(event) => {
+              event.preventDefault();
+              openEntityRecord("ai-prompts", promptId);
+            }}
+          >
+            {match[0]}
+          </a>,
+        );
+      } else {
+        nodes.push(match[0]);
+      }
+
+      cursor = matchIndex + match[0].length;
+    });
+
+    if (cursor < message.length) {
+      nodes.push(message.slice(cursor));
+    }
+
+    return nodes;
+  }
+
+  async function confirmDeleteEntityRecord(key: EntityKey, id: number) {
+    const entityConfig = entityConfigs[key];
+    if (!entityConfig) {
+      return;
+    }
+
+    const references = getDeleteReferences(key, id);
+    const selectedKeys =
+      deleteDialogState[key]?.selectedReferenceIds ??
+      references.map((reference) => buildDeleteSelectionKey(reference.entityKey, reference.id));
+    const row = document.getElementById(entityConfig.recordId(id));
+    const label = entityConfig.label.toLowerCase();
+    const endpoint = getDeleteRoute(key);
+    const selectedReferences = references.filter((reference) =>
+      selectedKeys.includes(buildDeleteSelectionKey(reference.entityKey, reference.id)),
+    );
+
+    row?.classList.add("db-viewer-list-item--removing");
+
+    try {
+      const response = await fetch(`${endpoint}/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          include: selectedReferences.map((reference) => ({
+            entity: reference.entityKey,
+            id: reference.id,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const detailText = await response.text();
+        let detail = detailText;
+        try {
+          const parsed = JSON.parse(detailText) as { error?: string };
+          detail = parsed.error ?? detailText;
+        } catch {
+          // keep raw text fallback
+        }
+
+        throw new Error(
+          getDeleteFailureMessage(detail || `Unable to delete this saved ${label}.`, `Unable to delete this saved ${label}.`),
+        );
+      }
+
+      entityConfig.setState((current) => current.filter((item) => Number((item as { id?: number }).id ?? 0) !== id));
+
+      for (const reference of selectedReferences) {
+        switch (reference.entityKey) {
+          case "job-postings":
+            setJobPostings((current) => current.filter((item) => item.id !== reference.id));
+            break;
+          case "resumes":
+            setResumes((current) => current.filter((item) => item.id !== reference.id));
+            break;
+          case "ai-prompt-templates":
+            setAiPromptTemplates((current) => current.filter((item) => item.id !== reference.id));
+            break;
+          case "ai-prompts":
+            setAiPrompts((current) => current.filter((item) => item.id !== reference.id));
+            break;
+        }
+      }
+
+      closeDeleteDialog(key);
+      setError("");
+    } catch (deleteError) {
+      row?.classList.remove("db-viewer-list-item--removing");
+      const message = deleteError instanceof Error ? deleteError.message : `Unable to delete this saved ${label}.`;
+      setDeleteFailureState((current) => ({
+        ...current,
+        [key]: { itemId: id, message },
+      }));
+      setError("");
+    }
+  }
 
   function getRefreshLabel(key: EntityKey): string {
     switch (key) {
@@ -1089,6 +1373,10 @@ function DBViewerTab() {
       refreshStatusId: "db-viewer--job-postings--refresh-status",
       listId: "db-viewer--job-postings--list",
       refreshButtonId: "db-viewer--job-postings--refresh-button",
+      deleteDialogId: "db-viewer--job-postings--delete-dialog",
+      deleteConfirmButtonId: "db-viewer--job-postings--delete-confirm-button",
+      deleteCancelButtonId: "db-viewer--job-postings--delete-cancel-button",
+      deleteReferenceCheckboxId: (entityKey, id) => `db-viewer--${entityKey}--delete-reference-${id}-checkbox`,
       exportButtonId: "db-viewer--job-postings--export-button",
       exportDialogId: "db-viewer--job-postings--export-dialog",
       exportCheckboxId: (id) => `db-viewer--job-postings--export-record-${id}-checkbox`,
@@ -1138,6 +1426,10 @@ function DBViewerTab() {
       refreshStatusId: "db-viewer--resumes--refresh-status",
       listId: "db-viewer--resumes--list",
       refreshButtonId: "db-viewer--resumes--refresh-button",
+      deleteDialogId: "db-viewer--resumes--delete-dialog",
+      deleteConfirmButtonId: "db-viewer--resumes--delete-confirm-button",
+      deleteCancelButtonId: "db-viewer--resumes--delete-cancel-button",
+      deleteReferenceCheckboxId: (entityKey, id) => `db-viewer--${entityKey}--delete-reference-${id}-checkbox`,
       exportButtonId: "db-viewer--resumes--export-button",
       exportDialogId: "db-viewer--resumes--export-dialog",
       exportCheckboxId: (id) => `db-viewer--resumes--export-record-${id}-checkbox`,
@@ -1184,6 +1476,10 @@ function DBViewerTab() {
       refreshStatusId: "db-viewer--ai-prompt-templates--refresh-status",
       listId: "db-viewer--ai-prompt-templates--list",
       refreshButtonId: "db-viewer--ai-prompt-templates--refresh-button",
+      deleteDialogId: "db-viewer--ai-prompt-templates--delete-dialog",
+      deleteConfirmButtonId: "db-viewer--ai-prompt-templates--delete-confirm-button",
+      deleteCancelButtonId: "db-viewer--ai-prompt-templates--delete-cancel-button",
+      deleteReferenceCheckboxId: (entityKey, id) => `db-viewer--${entityKey}--delete-reference-${id}-checkbox`,
       exportButtonId: "db-viewer--ai-prompt-templates--export-button",
       exportDialogId: "db-viewer--ai-prompt-templates--export-dialog",
       exportCheckboxId: (id) => `db-viewer--ai-prompt-templates--export-record-${id}-checkbox`,
@@ -1227,6 +1523,10 @@ function DBViewerTab() {
       refreshStatusId: "db-viewer--ai-prompts--refresh-status",
       listId: "db-viewer--ai-prompts--list",
       refreshButtonId: "db-viewer--ai-prompts--refresh-button",
+      deleteDialogId: "db-viewer--ai-prompts--delete-dialog",
+      deleteConfirmButtonId: "db-viewer--ai-prompts--delete-confirm-button",
+      deleteCancelButtonId: "db-viewer--ai-prompts--delete-cancel-button",
+      deleteReferenceCheckboxId: (entityKey, id) => `db-viewer--${entityKey}--delete-reference-${id}-checkbox`,
       exportButtonId: "db-viewer--ai-prompts--export-button",
       exportDialogId: "db-viewer--ai-prompts--export-dialog",
       exportCheckboxId: (id) => `db-viewer--ai-prompts--export-record-${id}-checkbox`,
@@ -1444,6 +1744,97 @@ function DBViewerTab() {
                   {refreshErrors[entity.key]}
                 </p>
               ) : null}
+
+              {deleteFailureState[entity.key]?.itemId !== null && deleteFailureState[entity.key]?.itemId !== undefined
+                ? (() => {
+                    const failureMessage = deleteFailureState[entity.key]?.message ?? "Unable to delete this saved record.";
+                    return (
+                      <div id={entity.deleteDialogId} className="db-viewer-export-dialog" role="alertdialog" aria-modal="false">
+                        <div className="db-viewer-export-dialog__header">
+                          <strong>Delete failed</strong>
+                        </div>
+                        <div className="db-viewer-export-dialog__list">
+                          <p className="db-viewer-status">{renderDeleteFailureMessage(failureMessage)}</p>
+                        </div>
+                        <div className="db-viewer-export-dialog__actions">
+                          <button
+                            id={entity.deleteCancelButtonId}
+                            type="button"
+                            className="button button--secondary"
+                            onClick={() => closeDeleteDialog(entity.key)}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()
+                : deleteDialogState[entity.key]?.itemId !== null && deleteDialogState[entity.key]?.itemId !== undefined
+                  ? (() => {
+                      const itemId = deleteDialogState[entity.key].itemId ?? 0;
+                      const references = getDeleteReferences(entity.key, itemId);
+                      const selectedIds = deleteDialogState[entity.key].selectedReferenceIds;
+
+                      return (
+                        <div id={entity.deleteDialogId} className="db-viewer-export-dialog" role="dialog" aria-modal="false">
+                          <div className="db-viewer-export-dialog__header">
+                            <strong>Delete {entity.label}</strong>
+                          </div>
+                          <div className="db-viewer-export-dialog__list">
+                            <p className="db-viewer-status">
+                              This will permanently delete the selected {entity.label.toLowerCase()} record.
+                            </p>
+                            {references.length > 0 ? (
+                              <>
+                                <p className="db-viewer-status">Related records to include in the deletion:</p>
+                                {references.map((reference) => {
+                                  const selectionKey = buildDeleteSelectionKey(reference.entityKey, reference.id);
+                                  return (
+                                    <label
+                                      key={selectionKey}
+                                      className="db-viewer-export-option"
+                                      htmlFor={entity.deleteReferenceCheckboxId(reference.entityKey, reference.id)}
+                                    >
+                                      <input
+                                        id={entity.deleteReferenceCheckboxId(reference.entityKey, reference.id)}
+                                        type="checkbox"
+                                        checked={selectedIds.includes(selectionKey)}
+                                        onChange={() => toggleDeleteReferenceSelection(entity.key, reference)}
+                                      />
+                                      <span>{reference.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </>
+                            ) : null}
+                          </div>
+                          <div className="db-viewer-export-dialog__actions">
+                            <button
+                              id={entity.deleteConfirmButtonId}
+                              type="button"
+                              className="button button--primary"
+                              onClick={() => {
+                                if (deleteDialogState[entity.key]?.itemId === null || deleteDialogState[entity.key]?.itemId === undefined) {
+                                  return;
+                                }
+                                void confirmDeleteEntityRecord(entity.key, deleteDialogState[entity.key].itemId);
+                              }}
+                            >
+                              Confirm delete
+                            </button>
+                            <button
+                              id={entity.deleteCancelButtonId}
+                              type="button"
+                              className="button button--secondary"
+                              onClick={() => closeDeleteDialog(entity.key)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  : null}
 
               {exportDialogOpen[entity.key] ? (
                 <div id={entity.exportDialogId} className="db-viewer-export-dialog" role="dialog" aria-modal="false">
@@ -1931,16 +2322,26 @@ function DBViewerTab() {
                               </details>
                             </div>
 
-                            <button
-                              id={entity.recordControlId(idField, "edit-button")}
-                              type="button"
-                              className="button button--secondary"
-                              onClick={() =>
-                                openEditor(entity.key, item as never, entity.buildDraft as (item: never) => Record<string, string>)
-                              }
-                            >
-                              Edit
-                            </button>
+                            <div className="db-viewer-list-item-actions">
+                              <button
+                                id={entity.recordControlId(idField, "edit-button")}
+                                type="button"
+                                className="button button--secondary"
+                                onClick={() =>
+                                  openEditor(entity.key, item as never, entity.buildDraft as (item: never) => Record<string, string>)
+                                }
+                              >
+                                Edit
+                              </button>
+                              <button
+                                id={entity.recordControlId(idField, "delete-button")}
+                                type="button"
+                                className="button button--delete"
+                                onClick={() => openDeleteDialog(entity.key, idField)}
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
                         </li>
                       );

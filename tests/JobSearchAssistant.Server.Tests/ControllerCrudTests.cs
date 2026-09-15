@@ -754,6 +754,179 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         Assert.Null(remaining);
     }
 
+    [Fact]
+    public async Task AiPrompts_Delete_WithSelectedRelatedRecords_DeletesThemInOneRequest()
+    {
+        RunMigrations();
+
+        var dependencies = await CreateDependenciesAsync("delete-with-related");
+        var created = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
+        {
+            Name = "delete-with-related",
+            AiUrl = "https://example.com/ai/delete-with-related",
+            JobPostingId = dependencies.jobPosting.Id,
+            ResumeId = dependencies.resume.Id,
+            AiPromptTemplateId = dependencies.template.Id,
+            PromptDocumentId = dependencies.promptDocument.Id,
+            ResponseDocumentId = dependencies.responseDocument.Id
+        });
+        Assert.NotNull(created);
+
+        var request = CreateJsonHttpContext(new
+        {
+            include = new[]
+            {
+                new { entity = "job-postings", id = dependencies.jobPosting.Id },
+                new { entity = "resumes", id = dependencies.resume.Id },
+                new { entity = "ai-prompt-templates", id = dependencies.template.Id },
+            }
+        });
+
+        var result = await new global::JobSearchAssistant.Server.AiPrompts().Delete(created.Id, request);
+        var response = CreateContext();
+        await result.ExecuteAsync(response);
+
+        Assert.Equal(StatusCodes.Status200OK, response.Response.StatusCode);
+
+        using var connection = Database.Connect();
+
+        Assert.Null(await connection.QuerySingleOrDefaultAsync<int?>("select id from ai_prompt where id = @Id", new { created.Id }));
+        Assert.Null(await connection.QuerySingleOrDefaultAsync<int?>("select id from job_posting where id = @Id", new { dependencies.jobPosting.Id }));
+        Assert.Null(await connection.QuerySingleOrDefaultAsync<int?>("select id from resume where id = @Id", new { dependencies.resume.Id }));
+        Assert.Null(await connection.QuerySingleOrDefaultAsync<int?>("select id from ai_prompt_template where id = @Id", new { dependencies.template.Id }));
+    }
+
+    [Fact]
+    public async Task AiPrompts_Delete_WhenReferencedByAnotherRecord_ReturnsFriendlyErrorAndRollsBack()
+    {
+        RunMigrations();
+
+        var dependencies = await CreateDependenciesAsync("delete-blocked");
+        var target = await new global::JobSearchAssistant.DB.Services.JobPostings().Create(new JobPosting
+        {
+            Title = "Delete blocked posting",
+            Company = "Contoso",
+            Location = "Remote",
+            WorkModel = WorkModel.Remote,
+            Salary = "$120k",
+            Url = "https://example.com/jobs/delete-blocked",
+            Document = new Document
+            {
+                Title = "Delete blocked posting document",
+                Type = DocumentType.Markdown,
+                Content = "Blocked posting content",
+                Source = "delete-blocked"
+            }
+        });
+        Assert.NotNull(target);
+
+        var prompt = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
+        {
+            Name = "blocking prompt",
+            AiUrl = "https://example.com/ai/blocking",
+            JobPostingId = target.Id,
+            ResumeId = dependencies.resume.Id,
+            AiPromptTemplateId = dependencies.template.Id,
+            PromptDocumentId = dependencies.promptDocument.Id,
+            ResponseDocumentId = dependencies.responseDocument.Id
+        });
+        Assert.NotNull(prompt);
+
+        var request = CreateJsonHttpContext(new { include = Array.Empty<object>() });
+        var result = await new global::JobSearchAssistant.Server.JobPostings().Delete(target.Id, request);
+        var response = CreateContext();
+        await result.ExecuteAsync(response);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, response.Response.StatusCode);
+
+        response.Response.Body.Position = 0;
+        using var reader = new StreamReader(response.Response.Body, Encoding.UTF8, leaveOpen: true);
+        var body = await reader.ReadToEndAsync();
+        Assert.Contains("AI Prompt records", body);
+        Assert.Contains("Delete the AI Prompt records first", body);
+
+        using var connection = Database.Connect();
+        var stillExists = await connection.QuerySingleOrDefaultAsync<int?>("select id from job_posting where id = @Id", new { target.Id });
+        Assert.Equal(target.Id, stillExists);
+    }
+
+    [Fact]
+    public async Task AiPrompts_Delete_WhenSelectedRelatedJobPostingIsBlockedByAnotherAiPrompt_ReturnsChildEntityMessageAndRollsBack()
+    {
+        RunMigrations();
+
+        var dependencies = await CreateDependenciesAsync("delete-blocked-child");
+        var sharedJobPosting = await new global::JobSearchAssistant.DB.Services.JobPostings().Create(new JobPosting
+        {
+            Title = "Shared blocked job posting",
+            Company = "Contoso",
+            Location = "Remote",
+            WorkModel = WorkModel.Remote,
+            Salary = "$130k",
+            Url = "https://example.com/jobs/shared-blocked",
+            Document = new Document
+            {
+                Title = "Shared blocked job posting document",
+                Type = DocumentType.Markdown,
+                Content = "Shared content",
+                Source = "shared-blocked"
+            }
+        });
+        Assert.NotNull(sharedJobPosting);
+
+        var targetPrompt = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
+        {
+            Name = "target prompt to delete",
+            AiUrl = "https://example.com/ai/target-delete",
+            JobPostingId = sharedJobPosting.Id,
+            ResumeId = dependencies.resume.Id,
+            AiPromptTemplateId = dependencies.template.Id,
+            PromptDocumentId = dependencies.promptDocument.Id,
+            ResponseDocumentId = dependencies.responseDocument.Id
+        });
+        Assert.NotNull(targetPrompt);
+
+        var blockerPrompt = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
+        {
+            Name = "other prompt still referencing shared posting",
+            AiUrl = "https://example.com/ai/blocker-delete",
+            JobPostingId = sharedJobPosting.Id,
+            ResumeId = dependencies.resume.Id,
+            AiPromptTemplateId = dependencies.template.Id,
+            PromptDocumentId = dependencies.promptDocument.Id,
+            ResponseDocumentId = dependencies.responseDocument.Id
+        });
+        Assert.NotNull(blockerPrompt);
+
+        var request = CreateJsonHttpContext(new
+        {
+            include = new[]
+            {
+                new { entity = "job-postings", id = sharedJobPosting.Id }
+            }
+        });
+
+        var result = await new global::JobSearchAssistant.Server.AiPrompts().Delete(targetPrompt.Id, request);
+        var response = CreateContext();
+        await result.ExecuteAsync(response);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, response.Response.StatusCode);
+
+        response.Response.Body.Position = 0;
+        using var reader = new StreamReader(response.Response.Body, Encoding.UTF8, leaveOpen: true);
+        var body = await reader.ReadToEndAsync();
+        Assert.Contains("The AI Prompt record could not be deleted because it references a Job Posting", body);
+        Assert.Contains("still referenced by other AI Prompt records", body);
+        Assert.Contains("Remove that reference(s) and try again", body);
+
+        using var connection = Database.Connect();
+        var promptStillExists = await connection.QuerySingleOrDefaultAsync<int?>("select id from ai_prompt where id = @Id", new { targetPrompt.Id });
+        Assert.Equal(targetPrompt.Id, promptStillExists);
+
+        var postingStillExists = await connection.QuerySingleOrDefaultAsync<int?>("select id from job_posting where id = @Id", new { sharedJobPosting.Id });
+        Assert.Equal(sharedJobPosting.Id, postingStillExists);
+    }
+
     private static async Task<(JobPosting jobPosting, Resume resume, AiPromptTemplate template, Document promptDocument, Document responseDocument)> CreateDependenciesAsync(string suffix)
     {
         var jobPosting = await new global::JobSearchAssistant.DB.Services.JobPostings().Create(new JobPosting

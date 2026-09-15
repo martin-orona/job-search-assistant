@@ -507,6 +507,294 @@ namespace DbViewer {
       await expect(page.locator(`#db-viewer--job-postings--record-${importedId}`)).toHaveClass(/db-viewer-list-item--highlight/);
     });
 
+    test("Scenario: Deleting an AI Prompt with child records lists the child records and deletes the selected set", async ({
+      page,
+    }, testInfo) => {
+      const flowHeaders = getTestHeaders(testInfo);
+      const jobPostingResponse = await callServer({
+        page,
+        testInfo,
+        route: "job-postings",
+        method: "POST",
+        data: {
+          title: "Delete Candidate Engineer",
+          company: "Delete Co",
+          location: "Remote",
+          salary: "$120,000",
+          workModel: "Remote",
+          url: "https://example.com/job/delete-candidate",
+          document: {
+            title: "Delete Candidate Engineer",
+            type: "markdown",
+            content: "# Delete Candidate Engineer",
+            source: "https://example.com/job/delete-candidate",
+          },
+        },
+      });
+      const jobPostingId = Number(jobPostingResponse.json.id);
+      expect(jobPostingId > 0, "The job posting must exist before testing delete references.").toBeTruthy();
+
+      const resumeResponse = await callServer({
+        page,
+        testInfo,
+        route: "resumes",
+        method: "POST",
+        data: {
+          name: "Resume for delete flow",
+          jobTitle: "Senior Software Engineer",
+          date: "2026-01-15",
+          document: { title: "Resume for delete flow", type: "markdown", content: "# Resume", source: null },
+        },
+      });
+      const resumeId = Number(resumeResponse.json.id);
+      expect(resumeId > 0, "The resume must exist before creating the AI prompt.").toBeTruthy();
+
+      const templateResponse = await callServer({
+        page,
+        testInfo,
+        route: "ai-prompt-templates",
+        method: "POST",
+        data: {
+          name: "Template for delete flow",
+          document: { title: "Template for delete flow", type: "markdown", content: "# Template", source: null },
+        },
+      });
+      const templateId = Number(templateResponse.json.id);
+      expect(templateId > 0, "The AI prompt template must exist before creating the AI prompt.").toBeTruthy();
+
+      const aiPromptResponse = await callServer({
+        page,
+        testInfo,
+        route: "ai-prompts",
+        method: "POST",
+        data: {
+          name: "Prompt that references the posting",
+          aiUrl: "https://chat.openai.com",
+          jobPostingId: jobPostingId,
+          resumeId: resumeId,
+          aiPromptTemplateId: templateId,
+          promptDocument: { title: "prompt", type: "markdown", content: "# prompt", source: null },
+          responseDocument: { title: "response", type: "markdown", content: "# response", source: null },
+        },
+      });
+      const aiPromptId = Number(aiPromptResponse.json.id);
+      expect(aiPromptId > 0, "The AI prompt must be created to exercise the referenced-record selection dialog.").toBeTruthy();
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+      await page.locator("#db-viewer--ai-prompts--container--summary").click();
+
+      const deleteButton = page.locator(`#db-viewer--ai-prompts--delete-button--record-${aiPromptId}`);
+      await expect(deleteButton).toBeVisible({ timeout: 10000 });
+      await deleteButton.click();
+
+      const deleteDialog = page.locator("#db-viewer--ai-prompts--delete-dialog");
+      await expect(deleteDialog).toBeVisible({ timeout: 10000 });
+      await expect(deleteDialog).toContainText("Related records to include in the deletion:");
+      await expect(deleteDialog).toContainText("Delete Candidate Engineer");
+      await expect(deleteDialog).toContainText("Resume for delete flow");
+      await expect(deleteDialog).toContainText("Template for delete flow");
+
+      await page.locator(`#db-viewer--job-postings--delete-reference-${jobPostingId}-checkbox`).check();
+      await page.locator(`#db-viewer--resumes--delete-reference-${resumeId}-checkbox`).check();
+      await page.locator(`#db-viewer--ai-prompt-templates--delete-reference-${templateId}-checkbox`).check();
+      await page.locator("#db-viewer--ai-prompts--delete-confirm-button").click();
+
+      await expect
+        .poll(
+          async () => {
+            const postings = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", { headers: flowHeaders });
+            if (!(await postings.ok())) {
+              return false;
+            }
+            const postingRecords = await postings.json();
+            const postingExists = postingRecords.some((record: any) => Number(record.id) === jobPostingId);
+
+            const resumes = await page.request.get("http://localhost:5000/api/v1/resumes?deep=true", { headers: flowHeaders });
+            if (!(await resumes.ok())) {
+              return false;
+            }
+            const resumeRecords = await resumes.json();
+            const resumeExists = resumeRecords.some((record: any) => Number(record.id) === resumeId);
+
+            const templates = await page.request.get("http://localhost:5000/api/v1/ai-prompt-templates?deep=true", {
+              headers: flowHeaders,
+            });
+            if (!(await templates.ok())) {
+              return false;
+            }
+            const templateRecords = await templates.json();
+            const templateExists = templateRecords.some((record: any) => Number(record.id) === templateId);
+
+            const prompts = await page.request.get("http://localhost:5000/api/v1/ai-prompts?deep=true", { headers: flowHeaders });
+            if (!(await prompts.ok())) {
+              return false;
+            }
+            const promptRecords = await prompts.json();
+            const promptExists = promptRecords.some((record: any) => Number(record.id) === aiPromptId);
+
+            return !postingExists && !resumeExists && !templateExists && !promptExists;
+          },
+          { timeout: 10000 },
+        )
+        .toBeTruthy();
+    });
+
+    test("Scenario: Deleting a record can be cancelled without removing it", async ({ page }, testInfo) => {
+      const flowHeaders = getTestHeaders(testInfo);
+      const seed = {
+        title: "Keep Candidate Engineer",
+        company: "Keep Co",
+        location: "Remote",
+        salary: "$110,000",
+        workModel: "Remote",
+        url: "https://example.com/job/keep-candidate",
+        document: {
+          title: "Keep Candidate Engineer",
+          type: "markdown",
+          content: "# Keep Candidate Engineer",
+          source: "https://example.com/job/keep-candidate",
+        },
+      };
+
+      const seedResponse = await callServer({ page, testInfo, route: "job-postings", method: "POST", data: seed });
+      const recordId = Number(seedResponse.json.id);
+      expect(recordId > 0, "The seed record must exist before testing cancel delete behavior.").toBeTruthy();
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+      await page.locator("#db-viewer--job-postings--container--summary").click();
+
+      const deleteButton = page.locator(`#db-viewer--job-postings--delete-button--record-${recordId}`);
+      await expect(deleteButton).toBeVisible({ timeout: 10000 });
+      await deleteButton.click();
+
+      await expect(page.locator("#db-viewer--job-postings--delete-dialog")).toBeVisible({ timeout: 10000 });
+      await page.locator("#db-viewer--job-postings--delete-cancel-button").click();
+
+      await expect(page.locator("#db-viewer--job-postings--delete-dialog")).toBeHidden();
+      await expect
+        .poll(
+          async () => {
+            const response = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", {
+              headers: flowHeaders,
+            });
+            if (!(await response.ok())) {
+              return false;
+            }
+
+            const records = await response.json();
+            return records.some((record: any) => Number(record.id) === recordId);
+          },
+          { timeout: 10000 },
+        )
+        .toBeTruthy();
+    });
+
+    test("Scenario: Deleting a record that is being referenced by another record shows a foreign-key error", async ({ page }, testInfo) => {
+      const flowHeaders = getTestHeaders(testInfo);
+
+      const jobPostingResponse = await callServer({
+        page,
+        testInfo,
+        route: "job-postings",
+        method: "POST",
+        data: {
+          title: "Referenced Job Posting",
+          company: "Reference Co",
+          location: "Remote",
+          salary: "$95,000",
+          workModel: "Remote",
+          url: "https://example.com/job/referenced",
+          document: {
+            title: "Referenced Job Posting",
+            type: "markdown",
+            content: "# Referenced Job Posting",
+            source: "https://example.com/job/referenced",
+          },
+        },
+      });
+      const jobPostingId = Number(jobPostingResponse.json.id);
+      expect(jobPostingId > 0, "The source job posting must exist before creating a referencing AI prompt.").toBeTruthy();
+
+      const resumeResponse = await callServer({
+        page,
+        testInfo,
+        route: "resumes",
+        method: "POST",
+        data: {
+          name: "Referenced Resume",
+          jobTitle: "Engineer",
+          date: "2026-01-10",
+          document: { title: "Referenced Resume", type: "markdown", content: "# Resume", source: null },
+        },
+      });
+      const resumeId = Number(resumeResponse.json.id);
+      expect(resumeId > 0, "The source resume must exist before creating a referencing AI prompt.").toBeTruthy();
+
+      const templateResponse = await callServer({
+        page,
+        testInfo,
+        route: "ai-prompt-templates",
+        method: "POST",
+        data: {
+          name: "Referenced Template",
+          document: { title: "Referenced Template", type: "markdown", content: "# Template", source: null },
+        },
+      });
+      const templateId = Number(templateResponse.json.id);
+      expect(templateId > 0, "The source AI prompt template must exist before creating a referencing AI prompt.").toBeTruthy();
+
+      const promptResponse = await callServer({
+        page,
+        testInfo,
+        route: "ai-prompts",
+        method: "POST",
+        data: {
+          name: "Prompt references the target",
+          aiUrl: "https://chat.openai.com",
+          jobPostingId: jobPostingId,
+          resumeId: resumeId,
+          aiPromptTemplateId: templateId,
+          promptDocument: { title: "prompt", type: "markdown", content: "# prompt", source: null },
+          responseDocument: { title: "response", type: "markdown", content: "# response", source: null },
+        },
+      });
+      const promptId = Number(promptResponse.json.id);
+      expect(promptId > 0, "The referencing AI prompt must exist so the target record is under a foreign-key dependency.").toBeTruthy();
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+      await page.locator("#db-viewer--job-postings--container--summary").click();
+
+      const deleteButton = page.locator(`#db-viewer--job-postings--delete-button--record-${jobPostingId}`);
+      await expect(deleteButton).toBeVisible({ timeout: 10000 });
+      await deleteButton.click();
+
+      const deleteDialog = page.locator("#db-viewer--job-postings--delete-dialog");
+      await expect(deleteDialog).toBeVisible({ timeout: 10000 });
+      await page.locator("#db-viewer--job-postings--delete-confirm-button").click();
+
+      await expect(deleteDialog).toContainText("AI Prompt records", { timeout: 10000 });
+      await expect(deleteDialog).toContainText("Delete the AI Prompt records first", { timeout: 10000 });
+      await expect(deleteDialog.getByRole("button", { name: "Confirm delete" })).toHaveCount(0);
+      await expect(deleteDialog.getByRole("button", { name: "Dismiss" })).toBeVisible({ timeout: 10000 });
+
+      await expect
+        .poll(
+          async () => {
+            const response = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", { headers: flowHeaders });
+            if (!(await response.ok())) {
+              return false;
+            }
+            const records = await response.json();
+            return records.some((record: any) => Number(record.id) === jobPostingId);
+          },
+          { timeout: 10000 },
+        )
+        .toBeTruthy();
+    });
+
     test("Scenario: Importing an AI Prompt with nested job, resume, and template references succeeds", async ({ page }, testInfo) => {
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();

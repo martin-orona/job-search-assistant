@@ -81,6 +81,8 @@ public class ModelWithDocumentCrud<T> : ModelCrud<T> where T : ModelWithDocument
     public override async Task<T?> GetById(int id, SqliteConnection connection) => await CRUD.GetById_WithDocument<T>(this.TableName, id, connection);
 
     public override async Task<T?> Delete(int id) => await CRUD.Delete_WithDocument<T>(this.TableName, id);
+
+    public override async Task<T?> Delete(int id, SqliteConnection connection) => await CRUD.Delete_WithDocument<T>(this.TableName, id, connection);
 }
 
 public class CRUD
@@ -716,7 +718,7 @@ public class CRUD
 
             try
             {
-                var deleted = await Delete<T>(tableName, id, connection);
+                await Delete<T>(tableName, id, connection);
             }
             catch (Exception ex)
             {
@@ -725,7 +727,10 @@ public class CRUD
 
             try
             {
-                var deletedDocument = await Delete<Document>(DocumentTableName, record.DocumentId, connection);
+                if (record.DocumentId > 0)
+                {
+                    await Delete<Document>(DocumentTableName, record.DocumentId, connection);
+                }
             }
             catch (Exception ex)
             {
@@ -740,6 +745,24 @@ public class CRUD
             await transaction.RollbackAsync();
             throw new DatabaseException($"Unable to delete [{tableName}] record [{id}] with document. Reason: {ex.Message}", ex);
         }
+    }
+
+    internal static async Task<T?> Delete_WithDocument<T>(string tableName, int id, SqliteConnection connection, SqliteTransaction? transaction = null) where T : ModelWithDocument
+    {
+        var record = await GetById_WithDocument<T>(tableName, id, connection);
+        if (record == null)
+        {
+            throw new NotFoundException($"Record [{id}] not found in [{tableName}].");
+        }
+
+        await Delete<T>(tableName, id, connection);
+
+        if (record.DocumentId > 0)
+        {
+            await Delete<Document>(DocumentTableName, record.DocumentId, connection);
+        }
+
+        return record;
     }
 
     private static IReadOnlyList<T> MapDeepRows<T>(IEnumerable<dynamic> rows) where T : Model

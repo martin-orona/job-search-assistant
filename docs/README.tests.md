@@ -147,7 +147,7 @@ The JSA uses Sqlite as its database. It is backed up to a well known directory. 
 
     Then it copies the database from the Cloud Backup Database Directory to the Local Database Directory
 
-    And When the API Server shuts down
+    When the API Server shuts down
 
     Then it copies the database from the Local Database Directory to the Cloud Backup Database Directory
 
@@ -172,12 +172,12 @@ The JSA has the ability to export records in a structured format.
 
     Then the JSA presents the User with a list of Entity rows to select for export
 
-    And When the User makes the selections they want
+    When the User makes the selections they want
     And presses the confirmation button
 
     Then the JSA exports a JSON document with the selected records and their child records
 
-    And When the User presses the Cancel button, to the right of the confirmation button, instead of the confirmation button
+    When the User presses the Cancel button, to the right of the confirmation button, instead of the confirmation button
 
     Then the selection list disappears
 
@@ -191,7 +191,7 @@ The JSA has the ability to import data, in the same data format as the export fo
 
     Then the JSA presents the user with a file selection dialog
 
-    And When the user selects a file to import
+    When the user selects a file to import
     And presses the confirmation button
 
     Then JSA imports the file's data
@@ -431,7 +431,7 @@ The records are taking up a lot of visual space. When there are many records, it
 
     Then the document is editable
 
-    And When the user presses the save button
+    When the user presses the save button
 
     Then the updates to the document are saved
 
@@ -466,7 +466,56 @@ The records are taking up a lot of visual space. When there are many records, it
     | AI Prompt Template |
     | AI Prompts |
 
-</details>
+### Scenario Outline: Entities can be deleted
+
+    Given the user is on the DB Viewer tab
+    And the <Entity> section is expanded
+    And records are visible
+    And each record has a Delete button, to the right of the Refresh button
+
+    When the user presses the Delete button
+
+    Then the user is asked to confirm that they really want to delete the record
+    And if the <Entity> has any foreign key references to other entities, the user is given a list of referenced objects to include in the deletion
+
+    When the user presses the Delete button on the confirmation screen
+
+    Then the record is deleted on the server
+    And the record is no longer visible in the list
+
+    Examples:
+    | Entity |
+    | Job Posting |
+    | Resume |
+    | AI Prompt Template |
+    | AI Prompts |
+
+### Scenario Outline: Entity deletion can be cancelled
+
+    Given the user is on the DB Viewer tab
+    And the confirmation dialog for deleting an <Entity> record is open
+
+    When the user presses the Cancel button in the confirmation screen
+
+    Then the confirmation screen is removed
+    And the record is left intact
+
+    Examples:
+    | Entity |
+    | Job Posting |
+    | Resume |
+    | AI Prompt Template |
+    | AI Prompts |
+
+### Scenario Outline: Entity deletion failure due to foreign key constraint
+
+    Given the user in on the DB Viewer tab
+    And the confirmation dialog for deleting an <Entity> record is open
+
+    When the user presses the Cancel button in the confirmation screen
+    And the record deletion has failed on the server due to the record having an incoming foreign key reference that prevented the deletion
+
+    Then the user is shown a notification screen that informs them that the record cannot be deleted because it is being referenced by other records
 
 ### Scenario: Daily backups
 
@@ -478,10 +527,12 @@ The records are taking up a lot of visual space. When there are many records, it
     Then the User can see a list of the database's daily backups
     And a Create Snapshot button, to the left of the Refresh button
 
-    And When the User presses the Create Snapshot button
+    When the User presses the Create Snapshot button
 
     Then the JSA creates a new daily snapshot of the database
 
     NOTE: Not yet, but for future features:
     1. Load a backup to view the content in it
     2. Restore a backup to overwrite the current database
+
+</details>
