@@ -763,10 +763,105 @@ namespace DbViewer {
 
         await expect(page.locator(config.controlId("list"))).toBeVisible();
 
-        await expect(page.locator(config.recordControlId(entityId, "editor--id"))).toContainText(String(entityId));
-        await expect(page.locator(config.recordControlId(entityId, config.checkField))).toContainText(
-          config.seeds.primary.data[config.checkFieldObjectKey],
-        );
+        const rowSummary = page.locator(config.recordId(entityId)).locator("summary").first();
+        await expect(rowSummary).toContainText(String(entityId));
+        await expect(rowSummary).toContainText(config.seeds.primary.data[config.checkFieldObjectKey]);
+      }
+    });
+
+    test.describe("Scenario Outline: Entity list items are expandable", () => {
+      type LocalEntityConfig = DbViewer.EntityConfig;
+
+      test("Entity: Job Posting", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "Job Posting",
+          ...build_common_entity({
+            build_id: (segments: string[]) => build_tab_id(["job-postings", ...segments]),
+          }),
+          seeds: seedRecords["job-postings"],
+        };
+
+        await runTest_entityListItemsExpandable({ page, testInfo, config });
+      });
+
+      test("Entity: Resume", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "Resume",
+          ...build_common_entity({
+            build_id: (segments: string[]) => build_tab_id(["resumes", ...segments]),
+          }),
+          seeds: seedRecords["resumes"],
+        };
+
+        await runTest_entityListItemsExpandable({ page, testInfo, config });
+      });
+
+      test("Entity: AI Prompt Template", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "AI Prompt Template",
+          ...build_common_entity({
+            build_id: (segments: string[]) => build_tab_id(["ai-prompt-templates", ...segments]),
+          }),
+          seeds: seedRecords["ai-prompt-templates"],
+        };
+
+        await runTest_entityListItemsExpandable({ page, testInfo, config });
+      });
+
+      test("Entity: AI Prompt", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "AI Prompt",
+          ...build_common_entity({
+            build_id: (segments: string[]) => build_tab_id(["ai-prompts", ...segments]),
+          }),
+          seeds: seedRecords["ai-prompts"],
+        };
+
+        await runTest_entityListItemsExpandable({ page, testInfo, config });
+      });
+
+      async function runTest_entityListItemsExpandable({
+        page,
+        testInfo,
+        config,
+      }: {
+        page: Page;
+        testInfo: TestInfo;
+        config: LocalEntityConfig;
+      }) {
+        const entityId = await seedTheDatabase({ page, testInfo, seeds: config.seeds });
+
+        await page.goto("/");
+        await page.getByRole("tab", { name: "DB Viewer" }).click();
+        await expandSection({ page, config });
+
+        const row = page.locator(config.recordId(entityId));
+        await expect(row).toBeVisible();
+
+        const expander = row.locator("details.db-viewer-record-expander").first();
+        await expect(expander).toBeVisible();
+        await expect(expander).not.toHaveAttribute("open", "");
+
+        const summary = expander.locator("summary").first();
+        const summaryText = await summary.textContent();
+        expect(summaryText).toContain(String(entityId));
+
+        const detailContent = expander.locator(".db-viewer-record-expander-content");
+        await expect(detailContent).not.toBeVisible();
+
+        const expectedSummaryValue = (() => {
+          if (config.name === "Job Posting") return config.seeds.primary.data.title;
+          return config.seeds.primary.data.name;
+        })();
+
+        await expect(summary).toContainText(String(entityId));
+        await expect(summary).toContainText(expectedSummaryValue);
+        await expect(detailContent).not.toBeVisible();
+
+        await summary.click();
+        await expect(expander).toHaveAttribute("open", "");
+        await expect(detailContent).toBeVisible();
+        await expect(summary).toContainText(expectedSummaryValue);
       }
     });
 
@@ -798,8 +893,10 @@ namespace DbViewer {
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
-          await expect(row.locator(config.recordControlId(record.id, "editor--id"))).toBeVisible();
-          await assertIsNotLinked(page, config.recordControlId(record.id, "editor--title"));
+          const summary = row.locator("summary").first();
+          await expect(summary).toContainText(String(record.id));
+          await expect(summary).toContainText(record.title ?? "");
+          await expect(summary.locator("a")).toHaveCount(0);
           await expect(row.locator("a.db-viewer-list-item-read-header-link")).toHaveCount(0);
         }
       });
@@ -827,8 +924,9 @@ namespace DbViewer {
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
-          await expect(row.locator(config.recordControlId(record.id, "editor--id"))).toBeVisible();
-          await assertIsNotLinked(page, config.recordControlId(record.id, "editor--name"));
+          const summary = row.locator("summary").first();
+          await expect(summary).toContainText(String(record.id));
+          await expect(summary).toContainText(record.name ?? "");
           await expect(row.locator("a.db-viewer-list-item-read-header-link")).toHaveCount(0);
         }
       });
@@ -856,8 +954,9 @@ namespace DbViewer {
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
-          await expect(row.locator(config.recordControlId(record.id, "editor--id"))).toBeVisible();
-          await assertIsNotLinked(page, config.recordControlId(record.id, "editor--name"));
+          const summary = row.locator("summary").first();
+          await expect(summary).toContainText(String(record.id));
+          await expect(summary).toContainText(record.name ?? "");
           await expect(row.locator("a.db-viewer-list-item-read-header-link")).toHaveCount(0);
         }
       });
@@ -885,8 +984,9 @@ namespace DbViewer {
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
-          await expect(row.locator(config.recordControlId(record.id, "editor--id"))).toBeVisible();
-          await assertIsNotLinked(page, config.recordControlId(record.id, "editor--name"));
+          const summary = row.locator("summary").first();
+          await expect(summary).toContainText(String(record.id));
+          await expect(summary).toContainText(record.name ?? "");
 
           await expect(row.locator("a.db-viewer-list-item-read-header-link")).toHaveCount(3);
           await assertIsLinked(page, config.recordControlId(record.id, "editor--job-posting--display--title"));
@@ -918,6 +1018,7 @@ namespace DbViewer {
         const row = page.locator(recordId);
 
         await expect(row).toBeVisible();
+        await expandRecordDetails({ page, config, entityId });
 
         await config.assert({ page, config });
       }
@@ -1077,6 +1178,7 @@ namespace DbViewer {
         const row = page.locator(recordId);
 
         await expect(row).toBeVisible();
+        await expandRecordDetails({ page, config, entityId });
 
         await config.assert({ page, config });
 
@@ -1099,6 +1201,10 @@ namespace DbViewer {
 
         await expect(page.locator("#db-viewer--ai-prompts--container")).toHaveAttribute("open", "");
         await expect(page.locator(referenceId)).toBeVisible();
+
+        const targetRow = page.locator(referenceId);
+        const targetExpander = targetRow.locator("details.db-viewer-record-expander").first();
+        await expect(targetExpander).toHaveAttribute("open", "");
       }
     });
 
@@ -1217,6 +1323,8 @@ namespace DbViewer {
           throw new Error("Initial record ID not available.");
         }
 
+        await expandRecordDetails({ page, config, entityId: record.id });
+
         const verify = buildEditorDisplayVerifier({ page, config, original, record });
         await verify("id", record.id.toString());
         await verify((config as LocalEntityConfig).updateField);
@@ -1236,7 +1344,7 @@ namespace DbViewer {
         await expect(response.ok, "Failed to update the record on the server.").toBe(true);
       }
 
-      async function assert({ page, config }: InternalTestActionParams) {
+      async function assert({ page, config, buildEditorDisplayVerifier }: InternalTestActionParams) {
         const original = config.seeds.primary.data;
         const record = config.seeds.primary.created;
 
@@ -1246,6 +1354,7 @@ namespace DbViewer {
 
         const row = page.locator(config.recordId(record.id));
         await expect(row).toBeVisible();
+        await expandRecordDetails({ page, config, entityId: record.id });
 
         const verify = buildEditorDisplayVerifier({ page, config, original, record });
         await verify("id", record.id.toString());
@@ -1282,6 +1391,8 @@ namespace DbViewer {
           if (!record.id) {
             throw new Error("Initial record ID not available.");
           }
+
+          await expandRecordDetails({ page, config, entityId: record.id });
 
           const verify = buildEditorVerifier({ page, config, original, record });
           await verify("id", record.id.toString());
@@ -1327,6 +1438,8 @@ namespace DbViewer {
             throw new Error("Initial record ID not available.");
           }
 
+          await expandRecordDetails({ page, config, entityId: record.id });
+
           const verifyDisplay = buildEditorDisplayVerifier({ page, config, original, record });
           await verifyDisplay("title", "Staff Platform Engineer");
           await verifyDisplay("company", "Fabrikam");
@@ -1336,6 +1449,8 @@ namespace DbViewer {
           await verifyDisplay("url", "https://example.com/job/platform");
           await verifyDisplay("document--display--type", "html");
           await verifyDisplay("document--display--content", "<h1>Staff Platform Engineer</h1>");
+
+          await expandRecordDetails({ page, config, entityId: record.id });
 
           // make sure that title is visible
           await expect(page.locator(buildEditorFieldId({ field: "title", recordId: record.id }))).toBeVisible();
@@ -1365,6 +1480,8 @@ namespace DbViewer {
           if (!record.id) {
             throw new Error("Initial record ID not available.");
           }
+
+          await expandRecordDetails({ page, config, entityId: record.id });
 
           const verify = buildEditorVerifier({ page, config, original, record });
           await verify("id", record.id.toString());
@@ -1404,12 +1521,16 @@ namespace DbViewer {
             throw new Error("Initial record ID not available.");
           }
 
+          await expandRecordDetails({ page, config, entityId: record.id });
+
           const verifyDisplay = buildEditorDisplayVerifier({ page, config, original, record });
           await verifyDisplay("name", "Platform Resume");
           await verifyDisplay("job-title", "Staff Platform Engineer");
           await verifyDisplay("date", "2026-02-20");
           await verifyDisplay("document--display--type", "html");
           await verifyDisplay("document--display--content", "<h1>Platform Resume</h1>");
+
+          await expandRecordDetails({ page, config, entityId: record.id });
 
           // make sure that name is visible
           await expect(page.locator(buildEditorFieldId({ field: "name", recordId: record.id }))).toBeVisible();
@@ -1439,6 +1560,8 @@ namespace DbViewer {
           if (!record.id) {
             throw new Error("Initial record ID not available.");
           }
+
+          await expandRecordDetails({ page, config, entityId: record.id });
 
           const verify = buildEditorVerifier({ page, config, original, record });
           await verify("id", record.id.toString());
@@ -1478,10 +1601,14 @@ namespace DbViewer {
             throw new Error("Initial record ID not available.");
           }
 
+          await expandRecordDetails({ page, config, entityId: record.id });
+
           const verifyDisplay = buildEditorDisplayVerifier({ page, config, original, record });
           await verifyDisplay("name", "Platform Interview Template");
           await verifyDisplay("document--display--type", "html");
           await verifyDisplay("document--display--content", "<h1>Assess the candidate's platform engineering experience.</h1>");
+
+          await expandRecordDetails({ page, config, entityId: record.id });
 
           // make sure that name is visible
           await expect(page.locator(buildEditorFieldId({ field: "name", recordId: record.id }))).toBeVisible();
@@ -1511,6 +1638,8 @@ namespace DbViewer {
           if (!record.id) {
             throw new Error("Initial record ID not available.");
           }
+
+          await expandRecordDetails({ page, config, entityId: record.id });
 
           const verify = buildEditorVerifier({ page, config, original, record });
           await verify("id", record.id.toString());
@@ -1574,6 +1703,8 @@ namespace DbViewer {
             throw new Error("Initial record ID not available.");
           }
 
+          await expandRecordDetails({ page, config, entityId: record.id });
+
           const verifyDisplay = buildEditorDisplayVerifier({ page, config, original, record });
           const alternateJobPosting = config.seeds.alternateJobPosting;
           const alternateResume = config.seeds.alternateResume;
@@ -1620,6 +1751,8 @@ namespace DbViewer {
             expectedValue: alternateAiPromptTemplate.data.name,
           });
 
+          await expandRecordDetails({ page, config, entityId: record.id });
+
           // make sure that name is visible
           await expect(page.locator(buildEditorFieldId({ field: "name", recordId: record.id }))).toBeVisible();
         }
@@ -1638,6 +1771,7 @@ namespace DbViewer {
         // make sure that the created record is visible
         const recordRow = page.locator(config.recordId(entityId));
         await expect(recordRow).toBeVisible({ timeout: 3000 });
+        await expandRecordDetails({ page, config, entityId });
 
         // validate that the form and action buttons are in the correct pre-edit state
         await expect(page.locator(config.formId())).not.toBeVisible();
@@ -1902,9 +2036,10 @@ namespace DbViewer {
         await page.locator(config.cancelButtonId(entityId)).click();
 
         await expect(page.locator(config.formId())).not.toBeVisible();
-        const actualValue = await page.locator(editFieldId).textContent();
-        await expect(actualValue).toBe(editValue);
-        await expect(actualValue).not.toBe(editValue + " :: Updated");
+        await expandRecordDetails({ page, config, entityId });
+        const actualValue = await page.locator(config.recordId(entityId)).locator("summary").first().textContent();
+        await expect(actualValue).toContain(String(editValue));
+        await expect(actualValue).not.toContain(editValue + " :: Updated");
       }
     });
   });
@@ -2088,6 +2223,20 @@ namespace DbViewer {
     expectedValue,
   }: PageConfigParams & VerifyEditorFieldParams) {
     const elementId = buildEditorFieldId({ page, config, testInfo, field, recordId });
+    const directLocator = page.locator(elementId);
+
+    if ((await directLocator.count()) > 0) {
+      await verifyDisplayField({ page, config, testInfo, elementId, expectedValue });
+      return;
+    }
+
+    const summaryFieldNames = new Set(["id", "title", "name"]);
+    if (summaryFieldNames.has(field)) {
+      const summaryText = await page.locator(config.recordId(recordId)).locator("summary").first().textContent();
+      await expect(summaryText).toContain(expectedValue);
+      return;
+    }
+
     await verifyDisplayField({ page, config, testInfo, elementId, expectedValue });
   }
 
@@ -2123,6 +2272,16 @@ namespace DbViewer {
       const expanderSummary = expander.locator("summary").first();
       await expanderSummary.click();
     }
+  }
+
+  async function expandRecordDetails({ page, config, entityId }: { page: Page; config: EntityConfig; entityId: number }) {
+    const record = page.locator(config.recordId(entityId));
+    const details = record.locator("details.db-viewer-record-expander").first();
+    await expect(details).toBeVisible({ timeout: 3000 });
+    if (!(await details.getAttribute("open"))) {
+      await details.locator("summary").first().click();
+    }
+    await expect(details).toHaveAttribute("open", "");
   }
 
   async function seedTheDatabase({ page, testInfo, seeds }: { page: Page; testInfo: TestInfo; seeds: Record<string, EntitySeed> }) {

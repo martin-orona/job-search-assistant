@@ -315,12 +315,18 @@
   justify-content: space-between;
   gap: 12px;
   padding: 16px 0;
+  padding: 10px 0;
   font-weight: 600;
   color: var(--text-h);
 }
 
 .db-viewer-entity summary::-webkit-details-marker {
   display: none;
+}
+
+.db-viewer-list-item .db-viewer-list-item-copy > .db-viewer-record-expander summary {
+  padding: 0 0;
+  /* background-color: dodgerblue !important; */
 }
 
 .db-viewer-entity-actions {
@@ -355,6 +361,7 @@
   display: grid;
   gap: 4px;
   padding: 12px 16px;
+  padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg) 88%, var(--accent-bg) 12%);
@@ -402,11 +409,54 @@
   flex-shrink: 0;
   align-self: flex-start;
   margin-left: auto;
+  padding: 2px 10px;
 }
 
 .db-viewer-list-item-copy strong,
 .db-viewer-list-item-copy span {
   overflow-wrap: anywhere;
+}
+
+.db-viewer-record-expander {
+  display: block;
+  width: 100%;
+}
+
+.db-viewer-record-expander > summary {
+  cursor: pointer;
+  list-style: none;
+  display: block;
+  width: 100%;
+}
+
+.db-viewer-record-expander > summary::-webkit-details-marker {
+  display: none;
+}
+
+.db-viewer-record-expander-summary-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.db-viewer-record-expander-summary-text::before {
+  content: "▸";
+  color: var(--text-muted, #6b7280);
+  font-size: 0.8rem;
+}
+
+.db-viewer-record-expander[open] > summary .db-viewer-record-expander-summary-text::before {
+  content: "▾";
+}
+
+.db-viewer-record-expander-content {
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+  padding-top: 4px;
+  /* margin-top: 12px; */
 }
 
 .db-viewer-list-item-read-header,

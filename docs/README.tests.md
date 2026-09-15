@@ -322,6 +322,26 @@ There are various entities that the JSA tracks. Each of them is visible in the D
     | AI Prompt Template |
     | AI Prompts |
 
+### Scenario Outline: Entity list items are expandable
+
+The records are taking up a lot of visual space. When there are many records, it becomes difficult for a User to make sense things because there is too much visual noise.
+
+    Given the user is on the DB Viewer tab
+
+    When the user expands an <Entity> expander
+
+    Then the user sees the list of saved <Entity> records
+    And each record is displayed in an expander
+    And the expander starts collapsed
+    And the first line of information in the list item is visible when the record expander is collapsed
+
+    Examples:
+    | Entity |
+    | Job Posting |
+    | Resume |
+    | AI Prompt Template |
+    | AI Prompts |
+
 ### Scenario Outline: Entities link to referenced entities
 
     Given one record (<parent>) that references another record (child)
@@ -333,6 +353,7 @@ There are various entities that the JSA tracks. Each of them is visible in the D
 
     Then the list of child records is expanded, if needed
     And the child record is scrolled into view if it is not already in view
+    And the child record is expanded if it is currently collapsed
     And the child has a transition animation to identify it as the target record
 
     Examples:

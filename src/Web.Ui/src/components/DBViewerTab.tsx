@@ -904,6 +904,11 @@ function DBViewerTab() {
 
       const row = target.closest(".db-viewer-list-item") as HTMLElement | null;
       if (row) {
+        const expander = row.querySelector("details.db-viewer-record-expander") as HTMLDetailsElement | null;
+        if (expander && !expander.open) {
+          expander.open = true;
+        }
+
         row.classList.remove("db-viewer-list-item--highlight");
         // read the element’s layout property to make the browser flush pending style changes, ensuring your CSS animation restart works
         void row.offsetWidth;
@@ -1840,65 +1845,90 @@ function DBViewerTab() {
                         );
                       }
 
+                      const summaryText = (() => {
+                        if (entity.key === "job-postings") {
+                          return `${jobposting.id ?? ""} • ${jobposting.title ?? "[missing title]"}`;
+                        }
+
+                        if (entity.key === "resumes") {
+                          return `${resume.id ?? ""} • ${resume.name ?? "[missing name]"}`;
+                        }
+
+                        if (entity.key === "ai-prompt-templates") {
+                          return `${prompttemplate.id ?? ""} • ${prompttemplate.name ?? "[missing name]"}`;
+                        }
+
+                        return `${prompt.id ?? ""} • ${prompt.name ?? "[missing name]"}`;
+                      })();
+
                       return (
                         <li key={idField} id={entity.recordId(idField)} className="db-viewer-list-item">
                           <div className="db-viewer-list-item-main">
                             <div className="db-viewer-list-item-copy">
-                              {entity.key === "job-postings" && (
-                                <>
-                                  <JobPostingDisplay
-                                    entity={entity}
-                                    targetEntity={jobPostingEntityConfig}
-                                    jobposting={jobposting}
-                                    onOpenRecord={openEntityRecord}
-                                  />
-                                  <ReferencedByDisplay
-                                    references={getAiPromptReferences((candidate) => candidate.jobPostingId === jobposting.id)}
-                                    onOpenRecord={openEntityRecord}
-                                  />
-                                </>
-                              )}
+                              <details className="db-viewer-record-expander">
+                                <summary>
+                                  <span className="db-viewer-record-expander-summary-text">{summaryText}</span>
+                                </summary>
+                                <div className="db-viewer-record-expander-content">
+                                  {entity.key === "job-postings" && (
+                                    <>
+                                      <JobPostingDisplay
+                                        entity={entity}
+                                        targetEntity={jobPostingEntityConfig}
+                                        jobposting={jobposting}
+                                        onOpenRecord={openEntityRecord}
+                                      />
+                                      <ReferencedByDisplay
+                                        references={getAiPromptReferences((candidate) => candidate.jobPostingId === jobposting.id)}
+                                        onOpenRecord={openEntityRecord}
+                                      />
+                                    </>
+                                  )}
 
-                              {entity.key === "resumes" && (
-                                <>
-                                  <ResumeDisplay
-                                    entity={entity}
-                                    targetEntity={resumeEntityConfig}
-                                    resume={resume}
-                                    onOpenRecord={openEntityRecord}
-                                  />
-                                  <ReferencedByDisplay
-                                    references={getAiPromptReferences((candidate) => candidate.resumeId === resume.id)}
-                                    onOpenRecord={openEntityRecord}
-                                  />
-                                </>
-                              )}
+                                  {entity.key === "resumes" && (
+                                    <>
+                                      <ResumeDisplay
+                                        entity={entity}
+                                        targetEntity={resumeEntityConfig}
+                                        resume={resume}
+                                        onOpenRecord={openEntityRecord}
+                                      />
+                                      <ReferencedByDisplay
+                                        references={getAiPromptReferences((candidate) => candidate.resumeId === resume.id)}
+                                        onOpenRecord={openEntityRecord}
+                                      />
+                                    </>
+                                  )}
 
-                              {entity.key === "ai-prompt-templates" && (
-                                <>
-                                  <AiPromptTemplateDisplay
-                                    entity={entity}
-                                    targetEntity={aiPromptTemplateEntityConfig}
-                                    template={prompttemplate}
-                                    onOpenRecord={openEntityRecord}
-                                  />
-                                  <ReferencedByDisplay
-                                    references={getAiPromptReferences((candidate) => candidate.aiPromptTemplateId === prompttemplate.id)}
-                                    onOpenRecord={openEntityRecord}
-                                  />
-                                </>
-                              )}
+                                  {entity.key === "ai-prompt-templates" && (
+                                    <>
+                                      <AiPromptTemplateDisplay
+                                        entity={entity}
+                                        targetEntity={aiPromptTemplateEntityConfig}
+                                        template={prompttemplate}
+                                        onOpenRecord={openEntityRecord}
+                                      />
+                                      <ReferencedByDisplay
+                                        references={getAiPromptReferences(
+                                          (candidate) => candidate.aiPromptTemplateId === prompttemplate.id,
+                                        )}
+                                        onOpenRecord={openEntityRecord}
+                                      />
+                                    </>
+                                  )}
 
-                              {entity.key === "ai-prompts" && (
-                                <AiPromptDisplay
-                                  entity={entity}
-                                  prompt={prompt}
-                                  onOpenRecord={openEntityRecord}
-                                  jobPostingEntity={jobPostingEntityConfig}
-                                  resumeEntity={resumeEntityConfig}
-                                  aiPromptTemplateEntity={aiPromptTemplateEntityConfig}
-                                />
-                              )}
+                                  {entity.key === "ai-prompts" && (
+                                    <AiPromptDisplay
+                                      entity={entity}
+                                      prompt={prompt}
+                                      onOpenRecord={openEntityRecord}
+                                      jobPostingEntity={jobPostingEntityConfig}
+                                      resumeEntity={resumeEntityConfig}
+                                      aiPromptTemplateEntity={aiPromptTemplateEntityConfig}
+                                    />
+                                  )}
+                                </div>
+                              </details>
                             </div>
 
                             <button
@@ -2035,14 +2065,12 @@ function JobPostingDisplay({
 
   return (
     <>
-      <strong className="db-viewer-list-item-read-header">
-        <span id={entity.recordControlId(jobposting.id, `editor--${infix}id`)}>{jobposting.id ?? ""}</span>
-        <span aria-hidden="true" className="db-viewer-list-item-read-header-separator">
-          •
-        </span>
-        {isRootEntity ? (
-          <span id={entity.recordControlId(jobposting.id, `editor--${infix}title`)}>{jobposting.title ?? "[missing title]"}</span>
-        ) : (
+      {!isRootEntity && (
+        <strong className="db-viewer-list-item-read-header">
+          <span id={entity.recordControlId(jobposting.id, `editor--${infix}id`)}>{jobposting.id ?? ""}</span>
+          <span aria-hidden="true" className="db-viewer-list-item-read-header-separator">
+            •
+          </span>
           <a
             className="db-viewer-list-item-read-header-link"
             href={`#${targetEntity.recordId(jobposting.id)}`}
@@ -2053,8 +2081,8 @@ function JobPostingDisplay({
           >
             <span id={entity.recordControlId(jobposting.id, `editor--${infix}title`)}>{jobposting.title ?? "[missing title]"}</span>
           </a>
-        )}
-      </strong>
+        </strong>
+      )}
 
       <div className="db-viewer-list-item-read-line">
         <span id={entity.recordControlId(jobposting.id, `editor--${infix}company`)}>{jobposting.company ?? ""}</span>
@@ -2111,14 +2139,12 @@ function ResumeDisplay({
 
   return (
     <>
-      <strong className="db-viewer-list-item-read-header">
-        <span id={entity.recordControlId(resume.id, `editor--${infix}id`)}>{resume.id ?? ""}</span>
-        <span aria-hidden="true" className="db-viewer-list-item-read-header-separator">
-          •
-        </span>
-        {isRootEntity ? (
-          <span id={entity.recordControlId(resume.id, `editor--${infix}name`)}>{resume.name ?? "[missing name]"}</span>
-        ) : (
+      {!isRootEntity && (
+        <strong className="db-viewer-list-item-read-header">
+          <span id={entity.recordControlId(resume.id, `editor--${infix}id`)}>{resume.id ?? ""}</span>
+          <span aria-hidden="true" className="db-viewer-list-item-read-header-separator">
+            •
+          </span>
           <a
             className="db-viewer-list-item-read-header-link"
             href={`#${targetEntity.recordId(resume.id)}`}
@@ -2129,8 +2155,8 @@ function ResumeDisplay({
           >
             <span id={entity.recordControlId(resume.id, `editor--${infix}name`)}>{resume.name ?? "[missing name]"}</span>
           </a>
-        )}
-      </strong>
+        </strong>
+      )}
       <div className="db-viewer-list-item-read-line">
         <span id={entity.recordControlId(resume.id, `editor--${infix}job-title`)}>{resume.jobTitle ?? ""}</span>
         <span id={entity.recordControlId(resume.id, `editor--${infix}date`)}>{toDateInputValue(resume.date) ?? ""}</span>
@@ -2168,14 +2194,12 @@ function AiPromptTemplateDisplay({
 
   return (
     <>
-      <strong className="db-viewer-list-item-read-header">
-        <span id={entity.recordControlId(template.id, `editor--${infix}id`)}>{template.id ?? ""}</span>
-        <span aria-hidden="true" className="db-viewer-list-item-read-header-separator">
-          •
-        </span>
-        {isRootEntity ? (
-          <span id={entity.recordControlId(template.id, `editor--${infix}name`)}>{template.name ?? "[missing name]"}</span>
-        ) : (
+      {!isRootEntity && (
+        <strong className="db-viewer-list-item-read-header">
+          <span id={entity.recordControlId(template.id, `editor--${infix}id`)}>{template.id ?? ""}</span>
+          <span aria-hidden="true" className="db-viewer-list-item-read-header-separator">
+            •
+          </span>
           <a
             className="db-viewer-list-item-read-header-link"
             href={`#${targetEntity.recordId(template.id)}`}
@@ -2186,8 +2210,8 @@ function AiPromptTemplateDisplay({
           >
             <span id={entity.recordControlId(template.id, `editor--${infix}name`)}>{template.name ?? "[missing name]"}</span>
           </a>
-        )}
-      </strong>
+        </strong>
+      )}
 
       <div className="db-viewer-list-item-read-line">
         <DocumentDisplay entity={entity} document={template.document} recordId={template.id} infix={`${infix}document`} label="Template" />
@@ -2240,14 +2264,6 @@ function AiPromptDisplay({
 
   return (
     <>
-      <strong className="db-viewer-list-item-read-header">
-        <span id={entity.recordControlId(prompt.id, `editor--${infix}id`)}>{prompt.id ?? ""}</span>
-        <span aria-hidden="true" className="db-viewer-list-item-read-header-separator">
-          •
-        </span>
-        <span id={entity.recordControlId(prompt.id, `editor--${infix}name`)}>{prompt.name ?? "[missing name]"}</span>
-      </strong>
-
       <div className="db-viewer-list-item-read-line">
         <div id={entity.recordControlId(prompt.id, `editor--${infix}ai-url`)}>{prompt.aiUrl}</div>
       </div>
