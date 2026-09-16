@@ -63,6 +63,9 @@ public class Program
         var admin = Admin.Map(api, app);
         var docs = new Documents().Map(api);
         var jobPostings = new JobPostings().Map(api);
+        var jobApplications = new JobApplications().Map(api);
+        var jobSources = new JobSources().Map(api);
+        var jobQuestions = new JobQuestions().Map(api);
         var aiPromptTemplates = new AiPromptTemplates().Map(api);
         var resumes = new Resumes().Map(api);
         var aiPrompts = new AiPrompts().Map(api);

@@ -153,6 +153,7 @@ public class QueryBuilder
         return modelType
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
+            .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
             .ToList()
             .AsReadOnly();
     }
@@ -162,6 +163,7 @@ public class QueryBuilder
         return modelType
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
+            .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
             .ToList()
             .AsReadOnly();
     }

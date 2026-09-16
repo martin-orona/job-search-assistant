@@ -2,6 +2,21 @@ namespace JobSearchAssistant.DB.Models;
 
 using System.ComponentModel.DataAnnotations;
 
+public class Document : Model
+{
+    [Required]
+    public string Title { get; set; } = string.Empty;
+
+    [Required]
+    public DocumentType Type { get; set; } = DocumentType.Unknown;
+
+    [Required]
+    public string Content { get; set; } = string.Empty;
+
+    public string? Source { get; set; }
+}
+
+
 /// <summary>
 /// Represents the type of a document.
 /// </summary>
@@ -27,18 +42,4 @@ public enum DocumentType
 
     /// <summary>Other document type.</summary>
     Other,
-}
-
-public class Document : Model
-{
-    [Required]
-    public string Title { get; set; } = string.Empty;
-
-    [Required]
-    public DocumentType Type { get; set; } = DocumentType.Unknown;
-
-    [Required]
-    public string Content { get; set; } = string.Empty;
-
-    public string? Source { get; set; }
 }

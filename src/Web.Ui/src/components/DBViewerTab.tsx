@@ -89,7 +89,40 @@ type SavedAiPrompt = {
   // } | null;
 };
 
-type EntityKey = "job-postings" | "resumes" | "ai-prompt-templates" | "ai-prompts";
+type JobSourceSummary = {
+  id: number;
+  name: string;
+  createdAt?: string;
+};
+
+type JobQuestionSummary = {
+  id: number;
+  question: string;
+  answer?: string | null;
+  jobApplicationId: number;
+  createdAt?: string;
+};
+
+type JobApplicationSummary = {
+  id: number;
+  company: string;
+  role: string;
+  appliedOnDate?: string | null;
+  status: string;
+  sourceId: number;
+  source?: JobSourceSummary | null;
+  jobPostingId: number;
+  jobPosting?: JobPostingSummary | null;
+  questions?: JobQuestionSummary[];
+  resume?: SavedResume | null;
+  coverLetter?: Document | null;
+  aiPrompt?: SavedAiPrompt | null;
+  notes?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type EntityKey = "job-postings" | "job-applications" | "job-sources" | "job-questions" | "resumes" | "ai-prompt-templates" | "ai-prompts";
 
 type RecordReference = {
   key: string;
@@ -123,6 +156,7 @@ type EntityConfig<T> = {
   deleteReferenceCheckboxId: (entityKey: EntityKey, id: number) => string;
   recordId: (id: number) => string;
   recordControlId: (id: number, controlName: string) => string;
+  createButtonId: string;
   editorId: string;
   editorSaveButtonId: string;
   editorCancelButtonId: string;
@@ -217,30 +251,45 @@ function getAiPromptSnapshot(prompt: SavedAiPrompt) {
 
 function DBViewerTab() {
   const [jobPostings, setJobPostings] = useState<JobPostingSummary[]>([]);
+  const [jobApplications, setJobApplications] = useState<JobApplicationSummary[]>([]);
+  const [jobSources, setJobSources] = useState<JobSourceSummary[]>([]);
+  const [jobQuestions, setJobQuestions] = useState<JobQuestionSummary[]>([]);
   const [resumes, setResumes] = useState<SavedResume[]>([]);
   const [aiPromptTemplates, setAiPromptTemplates] = useState<SavedPromptTemplate[]>([]);
   const [aiPrompts, setAiPrompts] = useState<SavedAiPrompt[]>([]);
   const [snapshotFiles, setSnapshotFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState<Record<EntityKey, boolean>>({
     "job-postings": true,
+    "job-applications": true,
+    "job-sources": true,
+    "job-questions": true,
     resumes: true,
     "ai-prompt-templates": true,
     "ai-prompts": true,
   });
   const [refreshErrors, setRefreshErrors] = useState<Record<EntityKey, string>>({
     "job-postings": "",
+    "job-applications": "",
+    "job-sources": "",
+    "job-questions": "",
     resumes: "",
     "ai-prompt-templates": "",
     "ai-prompts": "",
   });
   const [editors, setEditors] = useState<Record<EntityKey, EditorState>>({
     "job-postings": { isOpen: false, itemId: null, draft: {} },
+    "job-applications": { isOpen: false, itemId: null, draft: {} },
+    "job-sources": { isOpen: false, itemId: null, draft: {} },
+    "job-questions": { isOpen: false, itemId: null, draft: {} },
     resumes: { isOpen: false, itemId: null, draft: {} },
     "ai-prompt-templates": { isOpen: false, itemId: null, draft: {} },
     "ai-prompts": { isOpen: false, itemId: null, draft: {} },
   });
   const [expandedEntities, setExpandedEntities] = useState<Record<EntityKey, boolean>>({
     "job-postings": false,
+    "job-applications": false,
+    "job-sources": false,
+    "job-questions": false,
     resumes: false,
     "ai-prompt-templates": false,
     "ai-prompts": false,
@@ -250,48 +299,72 @@ function DBViewerTab() {
   const [dbBackupsError, setDbBackupsError] = useState("");
   const [exportDialogOpen, setExportDialogOpen] = useState<Record<EntityKey, boolean>>({
     "job-postings": false,
+    "job-applications": false,
+    "job-sources": false,
+    "job-questions": false,
     resumes: false,
     "ai-prompt-templates": false,
     "ai-prompts": false,
   });
   const [exportSelections, setExportSelections] = useState<Record<EntityKey, number[]>>({
     "job-postings": [],
+    "job-applications": [],
+    "job-sources": [],
+    "job-questions": [],
     resumes: [],
     "ai-prompt-templates": [],
     "ai-prompts": [],
   });
   const [importDialogOpen, setImportDialogOpen] = useState<Record<EntityKey, boolean>>({
     "job-postings": false,
+    "job-applications": false,
+    "job-sources": false,
+    "job-questions": false,
     resumes: false,
     "ai-prompt-templates": false,
     "ai-prompts": false,
   });
   const [importSelections, setImportSelections] = useState<Record<EntityKey, File | null>>({
     "job-postings": null,
+    "job-applications": null,
+    "job-sources": null,
+    "job-questions": null,
     resumes: null,
     "ai-prompt-templates": null,
     "ai-prompts": null,
   });
   const [importedRecordIds, setImportedRecordIds] = useState<Record<EntityKey, number[]>>({
     "job-postings": [],
+    "job-applications": [],
+    "job-sources": [],
+    "job-questions": [],
     resumes: [],
     "ai-prompt-templates": [],
     "ai-prompts": [],
   });
   const [importFileName, setImportFileName] = useState<Record<EntityKey, string>>({
     "job-postings": "",
+    "job-applications": "",
+    "job-sources": "",
+    "job-questions": "",
     resumes: "",
     "ai-prompt-templates": "",
     "ai-prompts": "",
   });
   const [deleteDialogState, setDeleteDialogState] = useState<Record<EntityKey, { itemId: number | null; selectedReferenceIds: string[] }>>({
     "job-postings": { itemId: null, selectedReferenceIds: [] },
+    "job-applications": { itemId: null, selectedReferenceIds: [] },
+    "job-sources": { itemId: null, selectedReferenceIds: [] },
+    "job-questions": { itemId: null, selectedReferenceIds: [] },
     resumes: { itemId: null, selectedReferenceIds: [] },
     "ai-prompt-templates": { itemId: null, selectedReferenceIds: [] },
     "ai-prompts": { itemId: null, selectedReferenceIds: [] },
   });
   const [deleteFailureState, setDeleteFailureState] = useState<Record<EntityKey, { itemId: number | null; message: string }>>({
     "job-postings": { itemId: null, message: "" },
+    "job-applications": { itemId: null, message: "" },
+    "job-sources": { itemId: null, message: "" },
+    "job-questions": { itemId: null, message: "" },
     resumes: { itemId: null, message: "" },
     "ai-prompt-templates": { itemId: null, message: "" },
     "ai-prompts": { itemId: null, message: "" },
@@ -300,6 +373,9 @@ function DBViewerTab() {
   const hasInitialLoadRef = useRef(false);
   const deleteDialogRefs = useRef<Record<EntityKey, HTMLDivElement | null>>({
     "job-postings": null,
+    "job-applications": null,
+    "job-sources": null,
+    "job-questions": null,
     resumes: null,
     "ai-prompt-templates": null,
     "ai-prompts": null,
@@ -446,6 +522,12 @@ function DBViewerTab() {
     switch (key) {
       case "job-postings":
         return "/api/v1/job-postings";
+      case "job-applications":
+        return "/api/v1/job-applications";
+      case "job-sources":
+        return "/api/v1/job-sources";
+      case "job-questions":
+        return "/api/v1/job-questions";
       case "resumes":
         return "/api/v1/resumes";
       case "ai-prompt-templates":
@@ -593,6 +675,12 @@ function DBViewerTab() {
     switch (key) {
       case "job-postings":
         return "job postings";
+      case "job-applications":
+        return "job applications";
+      case "job-sources":
+        return "job sources";
+      case "job-questions":
+        return "job questions";
       case "resumes":
         return "resumes";
       case "ai-prompt-templates":
@@ -650,6 +738,9 @@ function DBViewerTab() {
     hasInitialLoadRef.current = true;
     void Promise.all([
       loadEntity<JobPostingSummary>("job-postings", "/api/v1/job-postings?deep=true", setJobPostings),
+      loadEntity<JobApplicationSummary>("job-applications", "/api/v1/job-applications?deep=true", setJobApplications),
+      loadEntity<JobSourceSummary>("job-sources", "/api/v1/job-sources?deep=true", setJobSources),
+      loadEntity<JobQuestionSummary>("job-questions", "/api/v1/job-questions?deep=true", setJobQuestions),
       loadEntity<SavedResume>("resumes", "/api/v1/resumes/?deep=true", setResumes),
       loadEntity<SavedPromptTemplate>("ai-prompt-templates", "/api/v1/ai-prompt-templates/?deep=true", setAiPromptTemplates),
       loadEntity<SavedAiPrompt>("ai-prompts", "/api/v1/ai-prompts/?deep=true", setAiPrompts),
@@ -709,6 +800,75 @@ function DBViewerTab() {
     setEditors((current) => ({
       ...current,
       [key]: { isOpen: false, itemId: null, draft: {} },
+    }));
+  }
+
+  function getCreateDraft(key: EntityKey): Record<string, string> {
+    switch (key) {
+      case "job-postings":
+        return {
+          title: "",
+          company: "",
+          location: "",
+          salary: "",
+          "work-model": "Remote",
+          url: "",
+          "document-type": "markdown",
+          "document-content": "",
+        };
+      case "job-applications":
+        return {
+          company: "",
+          role: "",
+          "applied-on-date": "",
+          status: "Draft",
+          "source--id": "",
+          "job-posting--id": "",
+        };
+      case "job-sources":
+        return { name: "" };
+      case "job-questions":
+        return {
+          question: "",
+          answer: "",
+          "job-application--id": "",
+        };
+      case "resumes":
+        return {
+          name: "",
+          jobTitle: "",
+          date: "",
+          documentType: "markdown",
+          documentContent: "",
+        };
+      case "ai-prompt-templates":
+        return {
+          name: "",
+          documentType: "markdown",
+          documentContent: "",
+        };
+      case "ai-prompts":
+        return {
+          name: "",
+          aiUrl: "",
+          "job-posting--id": "",
+          "resume--id": "",
+          "ai-prompt-template--id": "",
+        };
+      default:
+        return {};
+    }
+  }
+
+  function openCreateEditor(key: EntityKey) {
+    setExpandedEntities((current) => ({ ...current, [key]: true }));
+    setEditors((current) => ({
+      ...current,
+      [key]: {
+        isOpen: true,
+        itemId: 0,
+        draft: getCreateDraft(key),
+      },
     }));
   }
 
@@ -885,6 +1045,55 @@ function DBViewerTab() {
           },
         } as JobPostingSummary;
       }
+      case "job-applications": {
+        return {
+          id: Number(record.id ?? 0),
+          company: String(record.company ?? ""),
+          role: String(record.role ?? ""),
+          appliedOnDate: record.appliedOnDate == null ? null : String(record.appliedOnDate ?? ""),
+          status: String(record.status ?? "Unknown"),
+          sourceId: Number(record.sourceId ?? 0),
+          source: record.source
+            ? ({
+                id: Number((record.source as Record<string, unknown>).id ?? 0),
+                name: String((record.source as Record<string, unknown>).name ?? ""),
+              } as JobSourceSummary)
+            : null,
+          jobPostingId: Number(record.jobPostingId ?? 0),
+          jobPosting: record.jobPosting
+            ? ({
+                id: Number((record.jobPosting as Record<string, unknown>).id ?? 0),
+                title: String((record.jobPosting as Record<string, unknown>).title ?? ""),
+                company: String((record.jobPosting as Record<string, unknown>).company ?? ""),
+                location: String((record.jobPosting as Record<string, unknown>).location ?? ""),
+                salary: String((record.jobPosting as Record<string, unknown>).salary ?? ""),
+                workModel: ((record.jobPosting as Record<string, unknown>).workModel as JobPostingSummary["workModel"]) ?? "Unknown",
+                url: String((record.jobPosting as Record<string, unknown>).url ?? ""),
+                documentId: Number((record.jobPosting as Record<string, unknown>).documentId ?? 0),
+                createdAt: String((record.jobPosting as Record<string, unknown>).createdAt ?? new Date().toISOString()),
+                document: ((record.jobPosting as Record<string, unknown>).document as Document | null) ?? null,
+              } as JobPostingSummary)
+            : null,
+          createdAt: String(record.createdAt ?? new Date().toISOString()),
+          updatedAt: String(record.updatedAt ?? new Date().toISOString()),
+        } as JobApplicationSummary;
+      }
+      case "job-sources": {
+        return {
+          id: Number(record.id ?? 0),
+          name: String(record.name ?? ""),
+          createdAt: String(record.createdAt ?? new Date().toISOString()),
+        } as JobSourceSummary;
+      }
+      case "job-questions": {
+        return {
+          id: Number(record.id ?? 0),
+          question: String(record.question ?? ""),
+          answer: record.answer == null ? null : String(record.answer ?? ""),
+          jobApplicationId: Number(record.jobApplicationId ?? 0),
+          createdAt: String(record.createdAt ?? new Date().toISOString()),
+        } as JobQuestionSummary;
+      }
       case "resumes": {
         const document = (record.document as Record<string, unknown> | undefined) ?? {};
         return {
@@ -1038,6 +1247,48 @@ function DBViewerTab() {
                 },
               };
             }
+            case "job-applications": {
+              const application = item as JobApplicationSummary;
+              return {
+                company: application.company,
+                role: application.role,
+                appliedOnDate: application.appliedOnDate ?? null,
+                status: application.status,
+                sourceId: application.sourceId,
+                source: application.source ? { name: application.source.name } : undefined,
+                jobPostingId: application.jobPostingId,
+                jobPosting: application.jobPosting
+                  ? {
+                      title: application.jobPosting.title ?? "",
+                      company: application.jobPosting.company ?? "",
+                      location: application.jobPosting.location ?? "",
+                      salary: application.jobPosting.salary ?? "",
+                      workModel: application.jobPosting.workModel ?? "Unknown",
+                      url: application.jobPosting.url ?? "",
+                      document: application.jobPosting.document
+                        ? {
+                            title: application.jobPosting.document.title ?? application.jobPosting.title ?? application.company,
+                            type: application.jobPosting.document.type ?? "markdown",
+                            content: application.jobPosting.document.content ?? "",
+                            source: application.jobPosting.document.source ?? null,
+                          }
+                        : undefined,
+                    }
+                  : undefined,
+              };
+            }
+            case "job-sources": {
+              const source = item as JobSourceSummary;
+              return { name: source.name };
+            }
+            case "job-questions": {
+              const question = item as JobQuestionSummary;
+              return {
+                question: question.question,
+                answer: question.answer ?? null,
+                jobApplicationId: question.jobApplicationId,
+              };
+            }
             case "resumes": {
               const resume = item as SavedResume;
               return {
@@ -1152,11 +1403,17 @@ function DBViewerTab() {
         const endpoint =
           key === "job-postings"
             ? "/api/v1/job-postings/"
-            : key === "resumes"
-              ? "/api/v1/resumes/"
-              : key === "ai-prompt-templates"
-                ? "/api/v1/ai-prompt-templates/"
-                : "/api/v1/ai-prompts/";
+            : key === "job-applications"
+              ? "/api/v1/job-applications/"
+              : key === "job-sources"
+                ? "/api/v1/job-sources/"
+                : key === "job-questions"
+                  ? "/api/v1/job-questions/"
+                  : key === "resumes"
+                    ? "/api/v1/resumes/"
+                    : key === "ai-prompt-templates"
+                      ? "/api/v1/ai-prompt-templates/"
+                      : "/api/v1/ai-prompts/";
 
         const response = await fetch(endpoint, {
           method: "POST",
@@ -1253,145 +1510,330 @@ function DBViewerTab() {
   }
 
   async function saveEditorItem(key: EntityKey, itemId: number | null, draft: Record<string, string>) {
-    if (itemId === null || itemId <= 0) {
-      return;
-    }
-
     try {
-      let updatePayload: Record<string, unknown> = {};
-      let updatedRecord: Record<string, unknown> | null = null;
+      let payload: Record<string, unknown> = {};
+      let savedRecord: Record<string, unknown> | null = null;
+      const isCreate = itemId === null || itemId <= 0;
 
       switch (key) {
         case "job-postings": {
-          const current = jobPostings.find((item) => item.id === itemId);
-          if (!current) {
-            return;
+          if (!isCreate) {
+            const current = jobPostings.find((item) => item.id === itemId);
+            if (!current) {
+              return;
+            }
+            const next = {
+              ...current,
+              title: draft.title || current.title,
+              company: draft.company || current.company,
+              location: draft.location || current.location,
+              salary: draft.salary || current.salary,
+              url: draft.url || current.url,
+              workModel: (draft.workModel || current.workModel) as JobPostingSummary["workModel"],
+              document: {
+                ...(current.document ?? {}),
+                type: normalizeDocumentType(draft.documentType || current.document?.type || "markdown"),
+                content: draft.documentContent || current.document?.content || "",
+              },
+            };
+            payload = next;
+            savedRecord = next;
+            break;
           }
-          const next = {
-            ...current,
-            title: draft.title || current.title,
-            company: draft.company || current.company,
-            location: draft.location || current.location,
-            salary: draft.salary || current.salary,
-            url: draft.url || current.url,
-            workModel: (draft.workModel || current.workModel) as JobPostingSummary["workModel"],
+
+          payload = {
+            title: draft.title ?? "",
+            company: draft.company ?? "",
+            location: draft.location ?? "",
+            salary: draft.salary ?? "",
+            workModel: draft["work-model"] ?? draft.workModel ?? "Remote",
+            url: draft.url ?? "",
             document: {
-              ...(current.document ?? {}),
-              type: normalizeDocumentType(draft.documentType || current.document?.type || "markdown"),
-              content: draft.documentContent || current.document?.content || "",
+              title: draft.title ?? "",
+              type: normalizeDocumentType(draft["document-type"] ?? draft.documentType ?? "markdown"),
+              content: draft["document-content"] || draft.documentContent || (draft.title ? `# ${draft.title}` : ""),
+              source: null,
             },
           };
-          updatePayload = next;
-          updatedRecord = next;
+          break;
+        }
+        case "job-applications": {
+          if (!isCreate) {
+            const current = jobApplications.find((item) => item.id === itemId);
+            if (!current) {
+              return;
+            }
+            const next = {
+              ...current,
+              company: draft.company || current.company,
+              role: draft.role || current.role,
+              appliedOnDate: draft.appliedOnDate ?? current.appliedOnDate ?? null,
+              status: draft.status || current.status,
+              sourceId: Number(draft["source--id"] ?? current.sourceId ?? 0),
+              source: jobSources.find((item) => item.id === Number(draft["source--id"] ?? current.sourceId ?? 0)) ?? current.source ?? null,
+              jobPostingId: Number(draft["job-posting--id"] ?? current.jobPostingId ?? 0),
+              jobPosting:
+                jobPostings.find((item) => item.id === Number(draft["job-posting--id"] ?? current.jobPostingId ?? 0)) ??
+                current.jobPosting ??
+                null,
+            };
+            payload = next;
+            savedRecord = next;
+            break;
+          }
+
+          payload = {
+            company: draft.company ?? "",
+            role: draft.role ?? "",
+            appliedOnDate: draft["applied-on-date"] || draft.appliedOnDate || null,
+            status: draft.status ?? "Draft",
+            sourceId: Number(draft["source--id"] ?? draft["source-id"] ?? 0),
+            jobPostingId: Number(draft["job-posting--id"] ?? draft["job-posting-id"] ?? 0),
+          };
+          break;
+        }
+        case "job-sources": {
+          if (!isCreate) {
+            const current = jobSources.find((item) => item.id === itemId);
+            if (!current) {
+              return;
+            }
+            payload = { ...current, name: draft.name || current.name };
+            savedRecord = payload;
+            break;
+          }
+
+          payload = { name: draft.name ?? "" };
+          break;
+        }
+        case "job-questions": {
+          if (!isCreate) {
+            const current = jobQuestions.find((item) => item.id === itemId);
+            if (!current) {
+              return;
+            }
+            const next = {
+              ...current,
+              question: draft.question || current.question,
+              answer: draft.answer ?? current.answer ?? null,
+              jobApplicationId: Number(draft["job-application--id"] ?? current.jobApplicationId ?? 0),
+            };
+            payload = next;
+            savedRecord = next;
+            break;
+          }
+
+          payload = {
+            question: draft.question ?? "",
+            answer: draft.answer ?? null,
+            jobApplicationId: Number(draft["job-application--id"] ?? 0),
+          };
           break;
         }
         case "resumes": {
-          const current = resumes.find((item) => item.id === itemId);
-          if (!current) {
-            return;
+          if (!isCreate) {
+            const current = resumes.find((item) => item.id === itemId);
+            if (!current) {
+              return;
+            }
+            const next = {
+              ...current,
+              name: draft.name || current.name,
+              jobTitle: draft.jobTitle || current.jobTitle,
+              date: draft.date || current.date,
+              document: {
+                ...(current.document ?? {}),
+                type: normalizeDocumentType(draft.documentType || current.document?.type || "markdown"),
+                content: draft.documentContent || current.document?.content || "",
+              },
+            };
+            payload = next;
+            savedRecord = next;
+            break;
           }
-          const next = {
-            ...current,
-            name: draft.name || current.name,
-            jobTitle: draft.jobTitle || current.jobTitle,
-            date: draft.date || current.date,
+
+          payload = {
+            name: draft.name ?? "",
+            jobTitle: draft.jobTitle ?? "",
+            date: draft.date ?? "",
             document: {
-              ...(current.document ?? {}),
-              type: normalizeDocumentType(draft.documentType || current.document?.type || "markdown"),
-              content: draft.documentContent || current.document?.content || "",
+              title: draft.name ?? "",
+              type: normalizeDocumentType(draft.documentType ?? "markdown"),
+              content: draft.documentContent ?? (draft.name ? `# ${draft.name}` : ""),
+              source: null,
             },
           };
-          updatePayload = next;
-          updatedRecord = next;
           break;
         }
         case "ai-prompt-templates": {
-          const current = aiPromptTemplates.find((item) => item.id === itemId);
-          if (!current) {
-            return;
+          if (!isCreate) {
+            const current = aiPromptTemplates.find((item) => item.id === itemId);
+            if (!current) {
+              return;
+            }
+            const next = {
+              ...current,
+              name: draft.name || current.name,
+              document: {
+                ...(current.document ?? {}),
+                type: normalizeDocumentType(draft.documentType || current.document?.type || "markdown"),
+                content: draft.documentContent || current.document?.content || "",
+              },
+            };
+            payload = next;
+            savedRecord = next;
+            break;
           }
-          const next = {
-            ...current,
-            name: draft.name || current.name,
+
+          payload = {
+            name: draft.name ?? "",
             document: {
-              ...(current.document ?? {}),
-              type: normalizeDocumentType(draft.documentType || current.document?.type || "markdown"),
-              content: draft.documentContent || current.document?.content || "",
+              title: draft.name ?? "",
+              type: normalizeDocumentType(draft.documentType ?? "markdown"),
+              content: draft.documentContent ?? (draft.name ? `# ${draft.name}` : ""),
+              source: null,
             },
           };
-          updatePayload = next;
-          updatedRecord = next;
           break;
         }
         case "ai-prompts": {
-          const current = aiPrompts.find((item) => item.id === itemId);
-          if (!current) {
-            return;
+          if (!isCreate) {
+            const current = aiPrompts.find((item) => item.id === itemId);
+            if (!current) {
+              return;
+            }
+            const jobPostingId = Number(draft["job-posting--id"] ?? current.jobPostingId);
+            const resumeId = Number(draft["resume--id"] ?? current.resumeId);
+            const aiPromptTemplateId = Number(draft["ai-prompt-template--id"] ?? current.aiPromptTemplateId);
+            const next = {
+              ...current,
+              name: draft.name || current.name,
+              aiUrl: draft.aiUrl || current.aiUrl,
+              jobPostingId,
+              resumeId,
+              aiPromptTemplateId,
+              jobPosting: jobPostings.find((item) => item.id === jobPostingId) ?? current.jobPosting,
+              resume: resumes.find((item) => item.id === resumeId) ?? current.resume,
+              aiPromptTemplate: aiPromptTemplates.find((item) => item.id === aiPromptTemplateId) ?? current.aiPromptTemplate,
+            };
+            payload = {
+              ...next,
+              jobPosting: undefined,
+              resume: undefined,
+              aiPromptTemplate: undefined,
+            };
+            savedRecord = next;
+            break;
           }
-          const jobPostingId = Number(draft["job-posting--id"] ?? current.jobPostingId);
-          const resumeId = Number(draft["resume--id"] ?? current.resumeId);
-          const aiPromptTemplateId = Number(draft["ai-prompt-template--id"] ?? current.aiPromptTemplateId);
-          const next = {
-            ...current,
-            name: draft.name || current.name,
-            aiUrl: draft.aiUrl || current.aiUrl,
-            jobPostingId,
-            resumeId,
-            aiPromptTemplateId,
-            jobPosting: jobPostings.find((item) => item.id === jobPostingId) ?? current.jobPosting,
-            resume: resumes.find((item) => item.id === resumeId) ?? current.resume,
-            aiPromptTemplate: aiPromptTemplates.find((item) => item.id === aiPromptTemplateId) ?? current.aiPromptTemplate,
+
+          payload = {
+            name: draft.name ?? "",
+            aiUrl: draft.aiUrl ?? "",
+            jobPostingId: Number(draft["job-posting--id"] ?? 0),
+            resumeId: Number(draft["resume--id"] ?? 0),
+            aiPromptTemplateId: Number(draft["ai-prompt-template--id"] ?? 0),
           };
-          updatePayload = {
-            ...next,
-            jobPosting: undefined,
-            resume: undefined,
-            aiPromptTemplate: undefined,
-          };
-          updatedRecord = next;
           break;
         }
       }
 
-      if (!updatedRecord) {
-        return;
-      }
+      const endpoint = (() => {
+        switch (key) {
+          case "job-postings":
+            return "/api/v1/job-postings";
+          case "job-applications":
+            return "/api/v1/job-applications";
+          case "job-sources":
+            return "/api/v1/job-sources";
+          case "job-questions":
+            return "/api/v1/job-questions";
+          case "resumes":
+            return "/api/v1/resumes";
+          case "ai-prompt-templates":
+            return "/api/v1/ai-prompt-templates";
+          case "ai-prompts":
+            return "/api/v1/ai-prompts";
+          default:
+            return "/api/v1/job-postings";
+        }
+      })();
 
-      const response = await fetch(
-        `${key === "job-postings" ? "/api/v1/job-postings" : key === "resumes" ? "/api/v1/resumes" : key === "ai-prompt-templates" ? "/api/v1/ai-prompt-templates" : "/api/v1/ai-prompts"}/${itemId}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatePayload),
-        },
-      );
+      const response = await fetch(isCreate ? endpoint : `${endpoint}/${itemId}`, {
+        method: isCreate ? "POST" : "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
         throw new Error((await response.text()) || "Unable to save the record.");
       }
 
       const saved = (await response.json()) as Record<string, unknown>;
-      const normalizedDate = key === "resumes" ? toDateInputValue(String(saved.date ?? updatedRecord.date ?? "")) : undefined;
+      const normalizedDate =
+        key === "resumes" ? toDateInputValue(String(saved.date ?? (savedRecord as { date?: string } | null)?.date ?? "")) : undefined;
       const updated = {
-        ...updatedRecord,
+        ...(savedRecord ?? {}),
         ...saved,
         ...(normalizedDate ? { date: normalizedDate } : {}),
       };
 
       switch (key) {
         case "job-postings":
-          setJobPostings((current) => current.map((item) => (item.id === itemId ? { ...item, ...(updated as JobPostingSummary) } : item)));
+          if (isCreate) {
+            setJobPostings((current) => [...current, updated as JobPostingSummary]);
+          } else {
+            setJobPostings((current) =>
+              current.map((item) => (item.id === itemId ? { ...item, ...(updated as JobPostingSummary) } : item)),
+            );
+          }
+          break;
+        case "job-applications":
+          if (isCreate) {
+            setJobApplications((current) => [...current, updated as JobApplicationSummary]);
+          } else {
+            setJobApplications((current) =>
+              current.map((item) => (item.id === itemId ? { ...item, ...(updated as JobApplicationSummary) } : item)),
+            );
+          }
+          break;
+        case "job-sources":
+          if (isCreate) {
+            setJobSources((current) => [...current, updated as JobSourceSummary]);
+          } else {
+            setJobSources((current) => current.map((item) => (item.id === itemId ? { ...item, ...(updated as JobSourceSummary) } : item)));
+          }
+          break;
+        case "job-questions":
+          if (isCreate) {
+            setJobQuestions((current) => [...current, updated as JobQuestionSummary]);
+          } else {
+            setJobQuestions((current) =>
+              current.map((item) => (item.id === itemId ? { ...item, ...(updated as JobQuestionSummary) } : item)),
+            );
+          }
           break;
         case "resumes":
-          setResumes((current) => current.map((item) => (item.id === itemId ? { ...item, ...(updated as SavedResume) } : item)));
+          if (isCreate) {
+            setResumes((current) => [...current, updated as SavedResume]);
+          } else {
+            setResumes((current) => current.map((item) => (item.id === itemId ? { ...item, ...(updated as SavedResume) } : item)));
+          }
           break;
         case "ai-prompt-templates":
-          setAiPromptTemplates((current) =>
-            current.map((item) => (item.id === itemId ? { ...item, ...(updated as SavedPromptTemplate) } : item)),
-          );
+          if (isCreate) {
+            setAiPromptTemplates((current) => [...current, updated as SavedPromptTemplate]);
+          } else {
+            setAiPromptTemplates((current) =>
+              current.map((item) => (item.id === itemId ? { ...item, ...(updated as SavedPromptTemplate) } : item)),
+            );
+          }
           break;
         case "ai-prompts":
-          setAiPrompts((current) => current.map((item) => (item.id === itemId ? { ...item, ...(updated as SavedAiPrompt) } : item)));
+          if (isCreate) {
+            setAiPrompts((current) => [...current, updated as SavedAiPrompt]);
+          } else {
+            setAiPrompts((current) => current.map((item) => (item.id === itemId ? { ...item, ...(updated as SavedAiPrompt) } : item)));
+          }
           break;
       }
 
@@ -1408,7 +1850,13 @@ function DBViewerTab() {
 
   const entityConfigs: Record<
     EntityKey,
-    EntityConfig<JobPostingSummary> | EntityConfig<SavedResume> | EntityConfig<SavedPromptTemplate> | EntityConfig<SavedAiPrompt>
+    | EntityConfig<JobPostingSummary>
+    | EntityConfig<JobApplicationSummary>
+    | EntityConfig<JobSourceSummary>
+    | EntityConfig<JobQuestionSummary>
+    | EntityConfig<SavedResume>
+    | EntityConfig<SavedPromptTemplate>
+    | EntityConfig<SavedAiPrompt>
   > = {
     "job-postings": {
       key: "job-postings",
@@ -1437,6 +1885,7 @@ function DBViewerTab() {
       importCancelButtonId: "db-viewer--job-postings--import-cancel-button",
       recordId: (id) => `db-viewer--job-postings--record-${id}`,
       recordControlId: (id, controlName) => `db-viewer--job-postings--${controlName}--record-${id}`,
+      createButtonId: "db-viewer--job-postings--create-button",
       editorId: "db-viewer--job-postings--editor",
       editorSaveButtonId: "db-viewer--job-postings--editor--save-button",
       editorCancelButtonId: "db-viewer--job-postings--editor--cancel-button",
@@ -1462,6 +1911,134 @@ function DBViewerTab() {
           documentContent: posting.document?.content ?? "",
         };
       },
+    },
+    "job-applications": {
+      key: "job-applications",
+      label: "Job Application",
+      fetchUrl: "/api/v1/job-applications?deep=true",
+      state: jobApplications,
+      setState: setJobApplications,
+      countId: "db-viewer--job-applications--count",
+      containerId: "db-viewer--job-applications--container",
+      refreshStatusId: "db-viewer--job-applications--refresh-status",
+      listId: "db-viewer--job-applications--list",
+      refreshButtonId: "db-viewer--job-applications--refresh-button",
+      deleteDialogId: "db-viewer--job-applications--delete-dialog",
+      deleteConfirmButtonId: "db-viewer--job-applications--delete-confirm-button",
+      deleteCancelButtonId: "db-viewer--job-applications--delete-cancel-button",
+      deleteReferenceCheckboxId: (entityKey, id) => `db-viewer--${entityKey}--delete-reference-${id}-checkbox`,
+      exportButtonId: "db-viewer--job-applications--export-button",
+      exportDialogId: "db-viewer--job-applications--export-dialog",
+      exportCheckboxId: (id) => `db-viewer--job-applications--export-record-${id}-checkbox`,
+      exportConfirmButtonId: "db-viewer--job-applications--export-confirm-button",
+      exportCancelButtonId: "db-viewer--job-applications--export-cancel-button",
+      importButtonId: "db-viewer--job-applications--import-button",
+      importDialogId: "db-viewer--job-applications--import-dialog",
+      importFileInputId: "db-viewer--job-applications--import-file-input",
+      importConfirmButtonId: "db-viewer--job-applications--import-confirm-button",
+      importCancelButtonId: "db-viewer--job-applications--import-cancel-button",
+      recordId: (id) => `db-viewer--job-applications--record-${id}`,
+      recordControlId: (id, controlName) => `db-viewer--job-applications--${controlName}--record-${id}`,
+      createButtonId: "db-viewer--job-applications--create-button",
+      editorId: "db-viewer--job-applications--editor",
+      editorSaveButtonId: "db-viewer--job-applications--editor--save-button",
+      editorCancelButtonId: "db-viewer--job-applications--editor--cancel-button",
+      editorFieldId: (field) => `db-viewer--job-applications--editor--${field}`,
+      summary: (item: JobApplicationSummary) => ({
+        primary: item.company || "Untitled job application",
+        secondary: item.role || "Unknown role",
+        tertiary: `${item.status || "Unknown status"}${item.appliedOnDate ? ` · ${toDateInputValue(item.appliedOnDate)}` : ""}`,
+      }),
+      buildDraft: (item: JobApplicationSummary) => ({
+        company: item.company,
+        role: item.role,
+        appliedOnDate: toDateInputValue(item.appliedOnDate),
+        status: item.status,
+        "source--id": String(item.sourceId ?? ""),
+        "job-posting--id": String(item.jobPostingId ?? ""),
+      }),
+    },
+    "job-sources": {
+      key: "job-sources",
+      label: "Job Source",
+      fetchUrl: "/api/v1/job-sources?deep=true",
+      state: jobSources,
+      setState: setJobSources,
+      countId: "db-viewer--job-sources--count",
+      containerId: "db-viewer--job-sources--container",
+      refreshStatusId: "db-viewer--job-sources--refresh-status",
+      listId: "db-viewer--job-sources--list",
+      refreshButtonId: "db-viewer--job-sources--refresh-button",
+      deleteDialogId: "db-viewer--job-sources--delete-dialog",
+      deleteConfirmButtonId: "db-viewer--job-sources--delete-confirm-button",
+      deleteCancelButtonId: "db-viewer--job-sources--delete-cancel-button",
+      deleteReferenceCheckboxId: (entityKey, id) => `db-viewer--${entityKey}--delete-reference-${id}-checkbox`,
+      exportButtonId: "db-viewer--job-sources--export-button",
+      exportDialogId: "db-viewer--job-sources--export-dialog",
+      exportCheckboxId: (id) => `db-viewer--job-sources--export-record-${id}-checkbox`,
+      exportConfirmButtonId: "db-viewer--job-sources--export-confirm-button",
+      exportCancelButtonId: "db-viewer--job-sources--export-cancel-button",
+      importButtonId: "db-viewer--job-sources--import-button",
+      importDialogId: "db-viewer--job-sources--import-dialog",
+      importFileInputId: "db-viewer--job-sources--import-file-input",
+      importConfirmButtonId: "db-viewer--job-sources--import-confirm-button",
+      importCancelButtonId: "db-viewer--job-sources--import-cancel-button",
+      recordId: (id) => `db-viewer--job-sources--record-${id}`,
+      recordControlId: (id, controlName) => `db-viewer--job-sources--${controlName}--record-${id}`,
+      createButtonId: "db-viewer--job-sources--create-button",
+      editorId: "db-viewer--job-sources--editor",
+      editorSaveButtonId: "db-viewer--job-sources--editor--save-button",
+      editorCancelButtonId: "db-viewer--job-sources--editor--cancel-button",
+      editorFieldId: (field) => `db-viewer--job-sources--editor--${field}`,
+      summary: (item: JobSourceSummary) => ({
+        primary: item.name || "Untitled job source",
+        secondary: "",
+      }),
+      buildDraft: (item: JobSourceSummary) => ({
+        name: item.name,
+      }),
+    },
+    "job-questions": {
+      key: "job-questions",
+      label: "Job Question",
+      fetchUrl: "/api/v1/job-questions?deep=true",
+      state: jobQuestions,
+      setState: setJobQuestions,
+      countId: "db-viewer--job-questions--count",
+      containerId: "db-viewer--job-questions--container",
+      refreshStatusId: "db-viewer--job-questions--refresh-status",
+      listId: "db-viewer--job-questions--list",
+      refreshButtonId: "db-viewer--job-questions--refresh-button",
+      deleteDialogId: "db-viewer--job-questions--delete-dialog",
+      deleteConfirmButtonId: "db-viewer--job-questions--delete-confirm-button",
+      deleteCancelButtonId: "db-viewer--job-questions--delete-cancel-button",
+      deleteReferenceCheckboxId: (entityKey, id) => `db-viewer--${entityKey}--delete-reference-${id}-checkbox`,
+      exportButtonId: "db-viewer--job-questions--export-button",
+      exportDialogId: "db-viewer--job-questions--export-dialog",
+      exportCheckboxId: (id) => `db-viewer--job-questions--export-record-${id}-checkbox`,
+      exportConfirmButtonId: "db-viewer--job-questions--export-confirm-button",
+      exportCancelButtonId: "db-viewer--job-questions--export-cancel-button",
+      importButtonId: "db-viewer--job-questions--import-button",
+      importDialogId: "db-viewer--job-questions--import-dialog",
+      importFileInputId: "db-viewer--job-questions--import-file-input",
+      importConfirmButtonId: "db-viewer--job-questions--import-confirm-button",
+      importCancelButtonId: "db-viewer--job-questions--import-cancel-button",
+      recordId: (id) => `db-viewer--job-questions--record-${id}`,
+      recordControlId: (id, controlName) => `db-viewer--job-questions--${controlName}--record-${id}`,
+      createButtonId: "db-viewer--job-questions--create-button",
+      editorId: "db-viewer--job-questions--editor",
+      editorSaveButtonId: "db-viewer--job-questions--editor--save-button",
+      editorCancelButtonId: "db-viewer--job-questions--editor--cancel-button",
+      editorFieldId: (field) => `db-viewer--job-questions--editor--${field}`,
+      summary: (item: JobQuestionSummary) => ({
+        primary: item.question || "Untitled job question",
+        secondary: item.answer || "No answer yet",
+      }),
+      buildDraft: (item: JobQuestionSummary) => ({
+        question: item.question,
+        answer: item.answer ?? "",
+        "job-application--id": String(item.jobApplicationId ?? ""),
+      }),
     },
     resumes: {
       key: "resumes",
@@ -1490,6 +2067,7 @@ function DBViewerTab() {
       importCancelButtonId: "db-viewer--resumes--import-cancel-button",
       recordId: (id) => `db-viewer--resumes--record-${id}`,
       recordControlId: (id, controlName) => `db-viewer--resumes--${controlName}--record-${id}`,
+      createButtonId: "db-viewer--resumes--create-button",
       editorId: "db-viewer--resumes--editor",
       editorSaveButtonId: "db-viewer--resumes--editor--save-button",
       editorCancelButtonId: "db-viewer--resumes--editor--cancel-button",
@@ -1540,6 +2118,7 @@ function DBViewerTab() {
       importCancelButtonId: "db-viewer--ai-prompt-templates--import-cancel-button",
       recordId: (id) => `db-viewer--ai-prompt-templates--record-${id}`,
       recordControlId: (id, controlName) => `db-viewer--ai-prompt-templates--${controlName}--record-${id}`,
+      createButtonId: "db-viewer--ai-prompt-templates--create-button",
       editorId: "db-viewer--ai-prompt-templates--editor",
       editorSaveButtonId: "db-viewer--ai-prompt-templates--editor--save-button",
       editorCancelButtonId: "db-viewer--ai-prompt-templates--editor--cancel-button",
@@ -1587,6 +2166,7 @@ function DBViewerTab() {
       importCancelButtonId: "db-viewer--ai-prompts--import-cancel-button",
       recordId: (id) => `db-viewer--ai-prompts--record-${id}`,
       recordControlId: (id, controlName) => `db-viewer--ai-prompts--${controlName}--record-${id}`,
+      createButtonId: "db-viewer--ai-prompts--create-button",
       editorId: "db-viewer--ai-prompts--editor",
       editorSaveButtonId: "db-viewer--ai-prompts--editor--save-button",
       editorCancelButtonId: "db-viewer--ai-prompts--editor--cancel-button",
@@ -1746,6 +2326,18 @@ function DBViewerTab() {
                   {isLoading ? "Loading…" : `${items.length} saved`}
                 </span>
                 <div className="db-viewer-entity-actions">
+                  <button
+                    id={entity.createButtonId}
+                    type="button"
+                    className="button button--primary"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openCreateEditor(entity.key);
+                    }}
+                  >
+                    Create
+                  </button>
                   <button
                     id={entity.exportButtonId}
                     type="button"
@@ -1983,6 +2575,358 @@ function DBViewerTab() {
                       type="button"
                       className="button button--secondary"
                       onClick={() => closeImportDialog(entity.key)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {editorState.isOpen && editorState.itemId === 0 ? (
+                <div id={entity.editorId} className="db-viewer-editor">
+                  {entity.key === "job-postings" ? (
+                    <>
+                      <label className="db-viewer-editor-label">
+                        Title
+                        <input
+                          id={entity.editorFieldId("title")}
+                          type="text"
+                          value={editorState.draft.title ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "title", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Company
+                        <input
+                          id={entity.editorFieldId("company")}
+                          type="text"
+                          value={editorState.draft.company ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "company", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Location
+                        <input
+                          id={entity.editorFieldId("location")}
+                          type="text"
+                          value={editorState.draft.location ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "location", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Salary
+                        <input
+                          id={entity.editorFieldId("salary")}
+                          type="text"
+                          value={editorState.draft.salary ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "salary", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Work Model
+                        <input
+                          id={entity.editorFieldId("work-model")}
+                          type="text"
+                          value={editorState.draft["work-model"] ?? editorState.draft.workModel ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "work-model", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        URL
+                        <input
+                          id={entity.editorFieldId("url")}
+                          type="text"
+                          value={editorState.draft.url ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "url", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Document type
+                        <select
+                          id={entity.editorFieldId("document-type")}
+                          value={normalizeDocumentType(editorState.draft["document-type"] ?? editorState.draft.documentType ?? "")}
+                          onChange={(event) => updateEditorValue(entity.key, "document-type", event.target.value)}
+                        >
+                          {DOCUMENT_TYPE_OPTIONS.map((option) => (
+                            <option key={option} value={option.toLowerCase()}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Document content
+                        <textarea
+                          id={entity.editorFieldId("document-content")}
+                          rows={10}
+                          value={editorState.draft["document-content"] ?? editorState.draft.documentContent ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "document-content", event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+
+                  {entity.key === "job-applications" ? (
+                    <>
+                      <label className="db-viewer-editor-label">
+                        Company
+                        <input
+                          id={entity.editorFieldId("company")}
+                          type="text"
+                          value={editorState.draft.company ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "company", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Role
+                        <input
+                          id={entity.editorFieldId("role")}
+                          type="text"
+                          value={editorState.draft.role ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "role", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Applied on date
+                        <input
+                          id={entity.editorFieldId("applied-on-date")}
+                          type="date"
+                          value={editorState.draft["applied-on-date"] ?? editorState.draft.appliedOnDate ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "applied-on-date", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Status
+                        <input
+                          id={entity.editorFieldId("status")}
+                          type="text"
+                          value={editorState.draft.status ?? "Draft"}
+                          onChange={(event) => updateEditorValue(entity.key, "status", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Source ID
+                        <input
+                          id={entity.editorFieldId("source--id")}
+                          type="number"
+                          value={editorState.draft["source--id"] ?? editorState.draft["source-id"] ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "source--id", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Job Posting ID
+                        <input
+                          id={entity.editorFieldId("job-posting--id")}
+                          type="number"
+                          value={editorState.draft["job-posting--id"] ?? editorState.draft["job-posting-id"] ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "job-posting--id", event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+
+                  {entity.key === "job-sources" ? (
+                    <>
+                      <label className="db-viewer-editor-label">
+                        Name
+                        <input
+                          id={entity.editorFieldId("name")}
+                          type="text"
+                          value={editorState.draft.name ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "name", event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+
+                  {entity.key === "job-questions" ? (
+                    <>
+                      <label className="db-viewer-editor-label">
+                        Question
+                        <input
+                          id={entity.editorFieldId("question")}
+                          type="text"
+                          value={editorState.draft.question ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "question", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Answer
+                        <input
+                          id={entity.editorFieldId("answer")}
+                          type="text"
+                          value={editorState.draft.answer ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "answer", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Job Application ID
+                        <input
+                          id={entity.editorFieldId("job-application--id")}
+                          type="number"
+                          value={editorState.draft["job-application--id"] ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "job-application--id", event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+
+                  {entity.key === "resumes" ? (
+                    <>
+                      <label className="db-viewer-editor-label">
+                        Name
+                        <input
+                          id={entity.editorFieldId("name")}
+                          type="text"
+                          value={editorState.draft.name ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "name", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Job title
+                        <input
+                          id={entity.editorFieldId("jobTitle")}
+                          type="text"
+                          value={editorState.draft.jobTitle ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "jobTitle", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Date
+                        <input
+                          id={entity.editorFieldId("date")}
+                          type="date"
+                          value={editorState.draft.date ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "date", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Document type
+                        <select
+                          id={entity.editorFieldId("documentType")}
+                          value={normalizeDocumentType(editorState.draft.documentType ?? "")}
+                          onChange={(event) => updateEditorValue(entity.key, "documentType", event.target.value)}
+                        >
+                          {DOCUMENT_TYPE_OPTIONS.map((option) => (
+                            <option key={option} value={option.toLowerCase()}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Document content
+                        <textarea
+                          id={entity.editorFieldId("documentContent")}
+                          rows={10}
+                          value={editorState.draft.documentContent ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "documentContent", event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+
+                  {entity.key === "ai-prompt-templates" ? (
+                    <>
+                      <label className="db-viewer-editor-label">
+                        Name
+                        <input
+                          id={entity.editorFieldId("name")}
+                          type="text"
+                          value={editorState.draft.name ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "name", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Document type
+                        <select
+                          id={entity.editorFieldId("documentType")}
+                          value={normalizeDocumentType(editorState.draft.documentType ?? "")}
+                          onChange={(event) => updateEditorValue(entity.key, "documentType", event.target.value)}
+                        >
+                          {DOCUMENT_TYPE_OPTIONS.map((option) => (
+                            <option key={option} value={option.toLowerCase()}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Document content
+                        <textarea
+                          id={entity.editorFieldId("documentContent")}
+                          rows={10}
+                          value={editorState.draft.documentContent ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "documentContent", event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+
+                  {entity.key === "ai-prompts" ? (
+                    <>
+                      <label className="db-viewer-editor-label">
+                        Name
+                        <input
+                          id={entity.editorFieldId("name")}
+                          type="text"
+                          value={editorState.draft.name ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "name", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        AI URL
+                        <input
+                          id={entity.editorFieldId("aiUrl")}
+                          type="text"
+                          value={editorState.draft.aiUrl ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "aiUrl", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Job Posting ID
+                        <input
+                          id={entity.editorFieldId("job-posting--id")}
+                          type="number"
+                          value={editorState.draft["job-posting--id"] ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "job-posting--id", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        Resume ID
+                        <input
+                          id={entity.editorFieldId("resume--id")}
+                          type="number"
+                          value={editorState.draft["resume--id"] ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "resume--id", event.target.value)}
+                        />
+                      </label>
+                      <label className="db-viewer-editor-label">
+                        AI Prompt Template ID
+                        <input
+                          id={entity.editorFieldId("ai-prompt-template--id")}
+                          type="number"
+                          value={editorState.draft["ai-prompt-template--id"] ?? ""}
+                          onChange={(event) => updateEditorValue(entity.key, "ai-prompt-template--id", event.target.value)}
+                        />
+                      </label>
+                    </>
+                  ) : null}
+
+                  <div className="db-viewer-editor-actions">
+                    <button
+                      id={entity.editorSaveButtonId}
+                      type="button"
+                      className="button button--primary"
+                      onClick={() => void saveEditorItem(entity.key, editorState.itemId, editorState.draft)}
+                    >
+                      Save
+                    </button>
+                    <button
+                      id={entity.editorCancelButtonId}
+                      type="button"
+                      className="button button--secondary"
+                      onClick={() => closeEditor(entity.key)}
                     >
                       Cancel
                     </button>
@@ -2297,6 +3241,21 @@ function DBViewerTab() {
                       const summaryText = (() => {
                         if (entity.key === "job-postings") {
                           return `${jobposting.id ?? ""} • ${jobposting.title ?? "[missing title]"}`;
+                        }
+
+                        if (entity.key === "job-applications") {
+                          const application = item as JobApplicationSummary;
+                          return `${application.id ?? ""} • ${application.company ?? "[missing company]"}`;
+                        }
+
+                        if (entity.key === "job-sources") {
+                          const source = item as JobSourceSummary;
+                          return `${source.id ?? ""} • ${source.name ?? "[missing name]"}`;
+                        }
+
+                        if (entity.key === "job-questions") {
+                          const question = item as JobQuestionSummary;
+                          return `${question.id ?? ""} • ${question.question ?? "[missing question]"}`;
                         }
 
                         if (entity.key === "resumes") {

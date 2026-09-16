@@ -3,6 +3,8 @@ using System.Text.Json;
 
 using Dapper;
 
+using Microsoft.AspNetCore.Http.HttpResults;
+
 using JobSearchAssistant.DB;
 using JobSearchAssistant.DB.Models;
 using JobSearchAssistant.DB.Services;
@@ -994,6 +996,141 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         Assert.NotNull(responseDocument);
 
         return (jobPosting!, resume!, template!, promptDocument!, responseDocument!);
+    }
+
+    private static async Task<string> ReadResponseBodyAsync(HttpContext context)
+    {
+        context.Response.Body.Position = 0;
+        using var reader = new StreamReader(context.Response.Body, Encoding.UTF8, leaveOpen: true);
+        return await reader.ReadToEndAsync();
+    }
+}
+
+[Collection("SQLiteDatabase")]
+public sealed class JobApplications_Controller_Tests : SqliteTestBase
+{
+    public JobApplications_Controller_Tests() : base("jobsearchassistant-job-applications-controller-tests")
+    {
+    }
+
+    [Fact]
+    public async Task JobApplications_GetById_ReturnsNotFound_WhenRecordDoesNotExist()
+    {
+        RunMigrations();
+
+        var result = await new global::JobSearchAssistant.Server.JobApplications().GetById(404);
+        var context = CreateContext();
+        await result.ExecuteAsync(context);
+
+        Assert.Equal(StatusCodes.Status404NotFound, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task JobApplications_Create_ReturnsCreatedApplication()
+    {
+        RunMigrations();
+
+        var source = await new global::JobSearchAssistant.DB.Services.JobSources().Create(new JobSource
+        {
+            Name = "LinkedIn"
+        });
+        Assert.NotNull(source);
+
+        var jobPosting = await new global::JobSearchAssistant.DB.Services.JobPostings().Create(new JobPosting
+        {
+            Title = "Senior Engineer",
+            Company = "Contoso",
+            Location = "Remote",
+            WorkModel = WorkModel.Remote,
+            Salary = "$150k",
+            Url = "https://example.com/jobs/senior-engineer",
+            Document = new Document
+            {
+                Title = "Senior Engineer description",
+                Type = DocumentType.Markdown,
+                Content = "Job description",
+                Source = "job-applications-controller"
+            }
+        });
+        Assert.NotNull(jobPosting);
+
+        var context = CreateJsonHttpContext(new
+        {
+            company = "Contoso",
+            role = "Senior Engineer",
+            appliedOnDate = (DateOnly?)null,
+            status = (int)ApplicationStatus.Draft,
+            sourceId = source.Id,
+            jobPostingId = jobPosting.Id,
+        });
+
+        var result = await new global::JobSearchAssistant.Server.JobApplications().Create(context);
+
+        var payload = Assert.IsType<CreatedAtRoute<JobApplication>>(result);
+        Assert.Equal("Contoso", payload.Value!.Company);
+        Assert.Equal("Senior Engineer", payload.Value.Role);
+        Assert.Equal(StatusCodes.Status201Created, payload.StatusCode);
+
+        using var connection = Database.Connect();
+        var createdCount = await connection.QuerySingleAsync<int>(
+            "select count(*) from job_application where company = @Company and role = @Role",
+            new { Company = "Contoso", Role = "Senior Engineer" });
+
+        Assert.Equal(1, createdCount);
+    }
+
+    [Fact]
+    public async Task JobApplications_Delete_RemovesRecord()
+    {
+        RunMigrations();
+
+        var source = await new global::JobSearchAssistant.DB.Services.JobSources().Create(new JobSource
+        {
+            Name = "Indeed"
+        });
+        Assert.NotNull(source);
+
+        var jobPosting = await new global::JobSearchAssistant.DB.Services.JobPostings().Create(new JobPosting
+        {
+            Title = "Platform Engineer",
+            Company = "Northwind",
+            Location = "Hybrid",
+            WorkModel = WorkModel.Hybrid,
+            Salary = "$140k",
+            Url = "https://example.com/jobs/platform-engineer",
+            Document = new Document
+            {
+                Title = "Platform Engineer description",
+                Type = DocumentType.Markdown,
+                Content = "Platform role description",
+                Source = "job-applications-delete"
+            }
+        });
+        Assert.NotNull(jobPosting);
+
+        var created = await new global::JobSearchAssistant.DB.Services.JobApplications().Create(new JobApplication
+        {
+            Company = "Northwind",
+            Role = "Platform Engineer",
+            AppliedOnDate = null,
+            Status = ApplicationStatus.Draft,
+            SourceId = source.Id,
+            JobPostingId = jobPosting.Id
+        });
+        Assert.NotNull(created);
+
+        var result = await new global::JobSearchAssistant.Server.JobApplications().Delete(created.Id);
+        var context = CreateContext();
+        await result.ExecuteAsync(context);
+
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+
+        using var connection = Database.Connect();
+        var remaining = await connection.QuerySingleOrDefaultAsync<int?>(
+            "select id from job_application where id = @Id",
+            new { created.Id });
+
+        Assert.Null(remaining);
     }
 
     private static async Task<string> ReadResponseBodyAsync(HttpContext context)

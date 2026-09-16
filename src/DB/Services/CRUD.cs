@@ -98,6 +98,9 @@ public class CRUD
         System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(Resumes).TypeHandle);
         System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(AiPrompts).TypeHandle);
         System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(AiPromptTemplates).TypeHandle);
+        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(JobSources).TypeHandle);
+        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(JobApplications).TypeHandle);
+        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(JobQuestions).TypeHandle);
     }
 
     internal static CrudGeneratorInfo RegisterCrudInfo<T>(string tableName) where T : Model
@@ -224,15 +227,21 @@ public class CRUD
         foreach (var property in modelProperties)
         {
             var currentPath = string.IsNullOrEmpty(path) ? property.Name : $"{path}.{property.Name}";
+            var propertyValue = property.GetValue(data);
 
-            if (property.GetValue(data) is not Model value)
+            if (propertyValue is null)
             {
-                // a null nested model is the "link to an existing record" path; the foreign key id carries the link
-                if (HasForeignKeyId(data, property))
+                // optional nested model properties may be left unset; a supplied foreign key id remains the link path
+                if (HasForeignKeyId(data, property) || IsOptionalNestedModel(property))
                 {
                     continue;
                 }
 
+                throw new Core.ValidationException($"Nested model property [{currentPath}] cannot be null.", new List<ValidationError>());
+            }
+
+            if (propertyValue is not Model value)
+            {
                 throw new Core.ValidationException($"Nested model property [{currentPath}] cannot be null.", new List<ValidationError>());
             }
 
@@ -254,6 +263,12 @@ public class CRUD
     {
         var idProperty = typeof(T).GetProperty($"{modelProperty.Name}Id", BindingFlags.Public | BindingFlags.Instance);
         return idProperty != null && CrudValidator.HasProvidedValue(idProperty, data);
+    }
+
+    internal static bool IsOptionalNestedModel(PropertyInfo modelProperty)
+    {
+        var propertyType = modelProperty.PropertyType;
+        return !propertyType.IsValueType && Nullable.GetUnderlyingType(propertyType) is null;
     }
 
     // every created child is keyed by its property here, so the foreign key backfill happens exactly once
@@ -481,15 +496,21 @@ public class CRUD
             foreach (var property in modelProperties)
             {
                 var currentPath = string.IsNullOrEmpty(path) ? property.Name : $"{path}.{property.Name}";
+                var propertyValue = property.GetValue(data);
 
-                if (property.GetValue(data) is not Model value)
+                if (propertyValue is null)
                 {
                     // a null nested model on update means the existing foreign key link is left untouched
-                    if (HasForeignKeyId(data, property))
+                    if (HasForeignKeyId(data, property) || IsOptionalNestedModel(property))
                     {
                         continue;
                     }
 
+                    throw new Core.ValidationException($"Nested model property [{currentPath}] cannot be null.", new List<ValidationError>());
+                }
+
+                if (propertyValue is not Model value)
+                {
                     throw new Core.ValidationException($"Nested model property [{currentPath}] cannot be null.", new List<ValidationError>());
                 }
 
@@ -903,6 +924,21 @@ public class CRUD
             return Convert.ToInt64(value);
         }
 
+        if (targetType == typeof(DateOnly))
+        {
+            if (value is DateOnly dateOnly)
+            {
+                return dateOnly;
+            }
+
+            if (value is DateTime dateTime)
+            {
+                return DateOnly.FromDateTime(dateTime);
+            }
+
+            return DateOnly.Parse(value.ToString() ?? string.Empty);
+        }
+
         if (targetType == typeof(DateTimeOffset))
         {
             return value is DateTimeOffset offset ? offset : DateTimeOffset.Parse(value.ToString() ?? string.Empty);
@@ -1038,6 +1074,11 @@ public class CRUD
             return enumValue.ToString();
         }
 
+        if (effectiveType == typeof(DateOnly) && value is JsonElement { ValueKind: JsonValueKind.String } dateOnlyElement)
+        {
+            return DateOnly.Parse(dateOnlyElement.GetString()!);
+        }
+
         if (value is not JsonElement jsonElement)
         {
             return value;
@@ -1168,12 +1209,14 @@ internal static class CrudInfoGeneration
        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
        .Where(p => !SystemFields.Contains(p.Name))
        .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
+       .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
        .ToFrozenDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
 
     internal static IReadOnlyList<string> GetInsertFields<T>() => typeof(T)
        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
        .Where(p => !SystemFields.Contains(p.Name))
        .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
+       .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
        .Select(p => Formatting.PascalToSnakeCase(p.Name))
        .ToList().AsReadOnly();
 
@@ -1181,6 +1224,7 @@ internal static class CrudInfoGeneration
        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
        .Where(p => !SystemFields.Contains(p.Name))
        .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
+       .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
        .Select(p => $"@{p.Name}")
        .ToList().AsReadOnly();
 
@@ -1188,6 +1232,7 @@ internal static class CrudInfoGeneration
        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
        .Where(p => !SystemFields.Contains(p.Name))
        .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
+       .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
        .Select(p => $"{Formatting.PascalToSnakeCase(p.Name)} = @{p.Name}")
        .ToList().AsReadOnly();
 

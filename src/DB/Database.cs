@@ -15,8 +15,10 @@ public class Database
         Services.CRUD.RegisterCrudServices();
 
         SqlMapper.AddTypeHandler(new DateTimeOffsetTypeHandler());
+        SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
         SqlMapper.AddTypeHandler(new EnumTypeHandler<DocumentType>());
         SqlMapper.AddTypeHandler(new EnumTypeHandler<WorkModel>());
+        SqlMapper.AddTypeHandler(new EnumTypeHandler<ApplicationStatus>());
         DefaultTypeMap.MatchNamesWithUnderscores = true;
 
         FileLifecycleManager.SyncFromCloud(cloudFolder, localFolder);

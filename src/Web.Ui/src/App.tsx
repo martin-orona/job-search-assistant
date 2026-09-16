@@ -1,91 +1,91 @@
-import { useEffect, useState } from 'react'
-import './App.css'
-import { DBViewerTab } from './components/DBViewerTab'
-import { JobPostingsTab } from './components/JobPostingsTab'
-import { ResumeAnalyzerTab } from './components/ResumeAnalyzerTab'
+import { useEffect, useState } from "react";
+import "./App.css";
+import { DBViewerTab } from "./components/DBViewerTab";
+import { JobApplicationsTab } from "./components/JobApplicationsTab";
+import { JobPostingsTab } from "./components/JobPostingsTab";
+import { ResumeAnalyzerTab } from "./components/ResumeAnalyzerTab";
 
 const tabs = [
   {
-    id: 'job-listings',
-    label: 'Job Postings',
+    id: "job-listings",
+    label: "Job Postings",
   },
   {
-    id: 'resume-analyzer',
-    label: 'Resume Analyzer',
+    id: "job-applications",
+    label: "Job Applications",
   },
   {
-    id: 'db-viewer',
-    label: 'DB Viewer',
+    id: "resume-analyzer",
+    label: "Resume Analyzer",
   },
-] as const
+  {
+    id: "db-viewer",
+    label: "DB Viewer",
+  },
+] as const;
 
 export type SavedJobPostingSummary = {
-  id: number
-  title: string
-  company: string
-  location: string
-  salary: string
-  workModel: 'Unknown' | 'Remote' | 'InOffice' | 'Hybrid'
-  url: string
-  documentId: number
-  createdAt: string
+  id: number;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  workModel: "Unknown" | "Remote" | "InOffice" | "Hybrid";
+  url: string;
+  documentId: number;
+  createdAt: string;
   document?: {
-    id: number
-    title: string
-    type: string
-    content: string
-    source: string | null
-  } | null
-}
+    id: number;
+    title: string;
+    type: string;
+    content: string;
+    source: string | null;
+  } | null;
+};
 
-const ACTIVE_TAB_STORAGE_KEY = 'jobSearchAssistant.activeTab'
-const SELECTED_JOB_POSTING_STORAGE_KEY =
-  'jobSearchAssistant.selectedJobPosting'
+const ACTIVE_TAB_STORAGE_KEY = "jobSearchAssistant.activeTab";
+const SELECTED_JOB_POSTING_STORAGE_KEY = "jobSearchAssistant.selectedJobPosting";
 
-type TabId = (typeof tabs)[number]['id']
+type TabId = (typeof tabs)[number]["id"];
 
 function isTabId(value: string | null): value is TabId {
-  return tabs.some((tab) => tab.id === value)
+  return tabs.some((tab) => tab.id === value);
 }
 
 function getStoredActiveTab(): TabId {
-  const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY)
-  return isTabId(stored) ? stored : tabs[0].id
+  const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+  return isTabId(stored) ? stored : tabs[0].id;
 }
 
 function getStoredSelectedJobPosting(): SavedJobPostingSummary | null {
-  const stored = localStorage.getItem(SELECTED_JOB_POSTING_STORAGE_KEY)
+  const stored = localStorage.getItem(SELECTED_JOB_POSTING_STORAGE_KEY);
   if (!stored) {
-    return null
+    return null;
   }
   try {
-    return JSON.parse(stored) as SavedJobPostingSummary
+    return JSON.parse(stored) as SavedJobPostingSummary;
   } catch {
-    return null
+    return null;
   }
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabId>(getStoredActiveTab)
-  const [selectedJobPosting, setSelectedJobPosting] =
-    useState<SavedJobPostingSummary | null>(getStoredSelectedJobPosting)
+  const [activeTab, setActiveTab] = useState<TabId>(getStoredActiveTab);
+  const [selectedJobPosting, setSelectedJobPosting] = useState<SavedJobPostingSummary | null>(getStoredSelectedJobPosting);
 
   useEffect(() => {
-    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab)
-  }, [activeTab])
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     if (selectedJobPosting) {
-      localStorage.setItem(
-        SELECTED_JOB_POSTING_STORAGE_KEY,
-        JSON.stringify(selectedJobPosting),
-      )
+      localStorage.setItem(SELECTED_JOB_POSTING_STORAGE_KEY, JSON.stringify(selectedJobPosting));
     } else {
-      localStorage.removeItem(SELECTED_JOB_POSTING_STORAGE_KEY)
+      localStorage.removeItem(SELECTED_JOB_POSTING_STORAGE_KEY);
     }
-  }, [selectedJobPosting])
+  }, [selectedJobPosting]);
 
-  const activeTabData = tabs.find((tab) => tab.id === activeTab) ?? tabs[0]
+  const activeTabData = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
 
   return (
     <main className="app-shell">
@@ -108,20 +108,17 @@ function App() {
           ))}
         </div>
 
-        <div
-          id={`${activeTabData.id}-panel`}
-          role="tabpanel"
-          aria-labelledby={`${activeTabData.id}-tab`}
-          className="tab-panel"
-        >
-          {activeTab === 'job-listings' ? (
+        <div id={`${activeTabData.id}-panel`} role="tabpanel" aria-labelledby={`${activeTabData.id}-tab`} className="tab-panel">
+          {activeTab === "job-listings" ? (
             <JobPostingsTab
               onAnalyze={(jobPosting) => {
-                setSelectedJobPosting(jobPosting)
-                setActiveTab('resume-analyzer')
+                setSelectedJobPosting(jobPosting);
+                setActiveTab("resume-analyzer");
               }}
             />
-          ) : activeTab === 'resume-analyzer' ? (
+          ) : activeTab === "job-applications" ? (
+            <JobApplicationsTab />
+          ) : activeTab === "resume-analyzer" ? (
             <ResumeAnalyzerTab jobPosting={selectedJobPosting} />
           ) : (
             <DBViewerTab />
@@ -129,7 +126,7 @@ function App() {
         </div>
       </section>
     </main>
-  )
+  );
 }
 
-export default App
+export default App;

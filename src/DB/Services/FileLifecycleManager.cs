@@ -7,10 +7,11 @@ using Microsoft.Data.Sqlite;
 
 public static class FileLifecycleManager
 {
-    private const string DbFileName = "JobSearchAssistant.db";
     public const string TestDatabasePrefix = "jsa_test_";
+    private const string DbFileName = "JobSearchAssistant.db";
     private const int MaxTestFlowIdLength = 80;
     private static readonly ConcurrentDictionary<string, HashSet<SqliteConnection>> ActiveConnectionsByDatabase = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly AsyncLocal<string?> ActiveTestFlowId = new();
 
     private static readonly string DefaultCloudFolder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -22,19 +23,15 @@ public static class FileLifecycleManager
         @"Marscelkai\JobSearchAssistant"
     );
 
-    private static string? ActiveTestFlowId { get; set; }
-
     public static string CloudFolder { get; set; } = DefaultCloudFolder;
 
     public static string LocalFolder { get; set; } = DefaultLocalFolder;
 
-    public static string LocalDbPath => string.IsNullOrWhiteSpace(ActiveTestFlowId)
-        ? Path.Combine(LocalFolder, DbFileName)
-        : Path.Combine(GetTestDatabaseFolder(ActiveTestFlowId), DbFileName);
-
-    private static string LocalTestDbFolder => Path.Combine(LocalFolder, "TestDatabases");
+    public static string LocalDbPath => Path.Combine(string.IsNullOrWhiteSpace(ActiveTestFlowId.Value) ? LocalFolder : Path.Combine(GetTestDatabaseFolder(ActiveTestFlowId.Value)), DbFileName);
 
     internal static string ConnectionString => $"Data Source={LocalDbPath};";
+
+    private static string LocalTestDbFolder => Path.Combine(LocalFolder, "TestDatabases");
 
     private static string CloudDbPath => Path.Combine(CloudFolder, DbFileName);
 
@@ -49,18 +46,15 @@ public static class FileLifecycleManager
         var safeId = SanitizeTestFlowId(flowId);
         if (string.IsNullOrEmpty(safeId))
         {
-            ActiveTestFlowId = null;
+            ActiveTestFlowId.Value = null;
             return;
         }
 
-        ActiveTestFlowId = safeId;
+        ActiveTestFlowId.Value = safeId;
         Directory.CreateDirectory(GetTestDatabaseFolder(safeId));
     }
 
-    public static void ClearTestDatabase()
-    {
-        ActiveTestFlowId = null;
-    }
+    public static void ClearTestDatabase() => ActiveTestFlowId.Value = null;
 
     public static void TrackConnection(SqliteConnection connection)
     {
@@ -118,9 +112,9 @@ public static class FileLifecycleManager
         CloseConnectionsForDatabase(databasePath);
         DeleteFolderWithRetry(folder);
 
-        if (ActiveTestFlowId == safeId)
+        if (string.Equals(ActiveTestFlowId.Value, safeId, StringComparison.OrdinalIgnoreCase))
         {
-            ActiveTestFlowId = null;
+            ActiveTestFlowId.Value = null;
         }
     }
 
@@ -229,7 +223,7 @@ public static class FileLifecycleManager
 
     public static void SyncToCloud()
     {
-        if (!string.IsNullOrWhiteSpace(ActiveTestFlowId))
+        if (!string.IsNullOrWhiteSpace(ActiveTestFlowId.Value))
         {
             Console.WriteLine("[Sync] Skipping cloud sync for active disposable test database.");
             return;

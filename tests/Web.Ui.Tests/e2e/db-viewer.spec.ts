@@ -145,6 +145,40 @@ namespace DbViewer {
           },
         },
       },
+      "job-sources": {
+        primary: {
+          name: "Job Source",
+          route: "job-sources",
+          data: {
+            name: "LinkedIn",
+          },
+        },
+      },
+      "job-questions": {
+        primary: {
+          name: "Job Question",
+          route: "job-questions",
+          data: {
+            question: "What makes you a good fit?",
+            answer: "I enjoy solving problems and shipping software.",
+            jobApplicationId: 0,
+          },
+        },
+      },
+      "job-applications": {
+        primary: {
+          name: "Job Application",
+          route: "job-applications",
+          data: {
+            company: "Contoso",
+            role: "Senior Engineer",
+            appliedOnDate: null,
+            status: 1,
+            sourceId: 0,
+            jobPostingId: 0,
+          },
+        },
+      },
     };
 
     test("Scenario: Navigate to the DB Viewer screen", async ({ page }) => {
@@ -992,6 +1026,7 @@ namespace DbViewer {
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
+      await page.locator("#db-viewer--job-postings--container--summary").click();
 
       shouldFailJobPostingRefresh = true;
       const refreshResponse = page.waitForResponse(
@@ -1076,6 +1111,51 @@ namespace DbViewer {
         await runTest_listIsVisible({ page, testInfo, config });
       });
 
+      test("Entity: Job Application", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "Job Application",
+          ...build_common_entity({
+            build_id: (segments: string[]) => build_tab_id(["job-applications", ...segments]),
+          }),
+          checkField: "editor--company",
+          checkFieldObjectKey: "company",
+
+          seeds: seedRecords["job-applications"],
+        };
+
+        await runTest_listIsVisible({ page, testInfo, config });
+      });
+
+      test("Entity: Job Source", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "Job Source",
+          ...build_common_entity({
+            build_id: (segments: string[]) => build_tab_id(["job-sources", ...segments]),
+          }),
+          checkField: "editor--name",
+          checkFieldObjectKey: "name",
+
+          seeds: seedRecords["job-sources"],
+        };
+
+        await runTest_listIsVisible({ page, testInfo, config });
+      });
+
+      test("Entity: Job Question", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "Job Question",
+          ...build_common_entity({
+            build_id: (segments: string[]) => build_tab_id(["job-questions", ...segments]),
+          }),
+          checkField: "editor--question",
+          checkFieldObjectKey: "question",
+
+          seeds: seedRecords["job-questions"],
+        };
+
+        await runTest_listIsVisible({ page, testInfo, config });
+      });
+
       async function runTest_listIsVisible({ page, testInfo, config }: { page: Page; testInfo: TestInfo; config: LocalEntityConfig }) {
         const entityId = await seedTheDatabase({ page, testInfo, seeds: config.seeds });
 
@@ -1097,6 +1177,154 @@ namespace DbViewer {
         const rowSummary = page.locator(config.recordId(entityId)).locator("summary").first();
         await expect(rowSummary).toContainText(String(entityId));
         await expect(rowSummary).toContainText(config.seeds.primary.data[config.checkFieldObjectKey]);
+      }
+    });
+
+    test.describe("Scenario Outline: New records can be created in the DB Viewer", () => {
+      type LocalEntityConfig = {
+        name: string;
+        route: string;
+        createButtonId: string;
+        formId: string;
+        saveButtonId: string;
+        countId: string;
+        listId: string;
+        setup?: (args: { page: Page; testInfo: TestInfo }) => Promise<Record<string, string>>;
+        fields: Array<{ field: string; value: string }>;
+        expectedText: string;
+      };
+
+      test("Entity: Job Posting", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "Job Posting",
+          route: "job-postings",
+          createButtonId: "#db-viewer--job-postings--create-button",
+          formId: "#db-viewer--job-postings--editor",
+          saveButtonId: "#db-viewer--job-postings--editor--save-button",
+          countId: "#db-viewer--job-postings--count",
+          listId: "#db-viewer--job-postings--list",
+          fields: [
+            { field: "title", value: "Principal Engineer" },
+            { field: "company", value: "Northwind" },
+            { field: "location", value: "Seattle, WA" },
+            { field: "salary", value: "$210,000" },
+            { field: "work-model", value: "Hybrid" },
+            { field: "url", value: "https://example.com/job/principal" },
+          ],
+          expectedText: "Principal Engineer",
+        };
+
+        await runTest_createWorkflow({ page, testInfo, config });
+      });
+
+      test("Entity: Job Source", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "Job Source",
+          route: "job-sources",
+          createButtonId: "#db-viewer--job-sources--create-button",
+          formId: "#db-viewer--job-sources--editor",
+          saveButtonId: "#db-viewer--job-sources--editor--save-button",
+          countId: "#db-viewer--job-sources--count",
+          listId: "#db-viewer--job-sources--list",
+          fields: [{ field: "name", value: "Indeed" }],
+          expectedText: "Indeed",
+        };
+
+        await runTest_createWorkflow({ page, testInfo, config });
+      });
+
+      test("Entity: Job Application", async ({ page }: { page: Page }, testInfo: TestInfo) => {
+        const config = {
+          name: "Job Application",
+          route: "job-applications",
+          createButtonId: "#db-viewer--job-applications--create-button",
+          formId: "#db-viewer--job-applications--editor",
+          saveButtonId: "#db-viewer--job-applications--editor--save-button",
+          countId: "#db-viewer--job-applications--count",
+          listId: "#db-viewer--job-applications--list",
+          setup: async ({ page, testInfo }) => {
+            const sourceResponse = await callServer({
+              page,
+              testInfo,
+              route: "job-sources",
+              method: "POST",
+              data: { name: "LinkedIn" },
+            });
+
+            const postingResponse = await callServer({
+              page,
+              testInfo,
+              route: "job-postings",
+              method: "POST",
+              data: {
+                title: "Platform Engineer",
+                company: "Fabrikam",
+                location: "Austin, TX",
+                salary: "$175,000",
+                workModel: "Hybrid",
+                url: "https://example.com/job/platform",
+                document: {
+                  title: "Platform Engineer",
+                  type: "markdown",
+                  content: "# Platform Engineer",
+                  source: "https://example.com/job/platform",
+                },
+              },
+            });
+
+            return {
+              "source--id": String(sourceResponse.json.id),
+              "job-posting--id": String(postingResponse.json.id),
+            };
+          },
+          fields: [
+            { field: "company", value: "Northwind" },
+            { field: "role", value: "Principal Engineer" },
+            { field: "applied-on-date", value: "2026-09-15" },
+            { field: "status", value: "Draft" },
+          ],
+          expectedText: "Northwind",
+        };
+
+        await runTest_createWorkflow({ page, testInfo, config });
+      });
+
+      async function runTest_createWorkflow({ page, testInfo, config }: { page: Page; testInfo: TestInfo; config: LocalEntityConfig }) {
+        await page.goto("/");
+        await page.getByRole("tab", { name: "DB Viewer" }).click();
+
+        const setupValues = config.setup ? await config.setup({ page, testInfo }) : {};
+
+        await page.locator(config.createButtonId).click();
+        await expect(page.locator(config.formId)).toBeVisible();
+
+        for (const fieldConfig of config.fields) {
+          const value = fieldConfig.value;
+          await page.locator(`${config.formId} [id$="${fieldConfig.field}"]`).fill(value);
+        }
+
+        for (const [field, value] of Object.entries(setupValues)) {
+          const control = page.locator(`${config.formId} [id$="${field}"]`);
+          if (await control.count()) {
+            await control.fill(value);
+          }
+        }
+
+        const createRequest = page.waitForRequest((request) => {
+          return request.method() === "POST" && request.url().endsWith(`/api/v1/${config.route}`) && request.postData() !== null;
+        });
+
+        const createResponse = page.waitForResponse((response) => {
+          return response.request().method() === "POST" && response.url().endsWith(`/api/v1/${config.route}`) && response.ok();
+        });
+
+        await page.locator(config.saveButtonId).click();
+
+        await createRequest;
+        await createResponse;
+
+        await expect(page.locator(config.countId)).toContainText("1 saved");
+        await expect(page.locator(config.listId)).toContainText(config.expectedText);
       }
     });
 
@@ -2627,13 +2855,101 @@ namespace DbViewer {
   }
 
   async function seedTheDatabase({ page, testInfo, seeds }: { page: Page; testInfo: TestInfo; seeds: Record<string, EntitySeed> }) {
-    for (const [_, seed] of Object.entries(seeds)) {
+    const seedEntries = Object.entries(seeds);
+
+    for (const [_, seed] of seedEntries) {
+      let payload = structuredClone(seed.data);
+
+      if (seed.route === "job-applications") {
+        if (!payload.sourceId) {
+          const sourceResponse = await callServer({
+            page,
+            testInfo,
+            route: "job-sources",
+            method: "POST",
+            data: { name: "LinkedIn" },
+          });
+          payload.sourceId = sourceResponse.json.id;
+        }
+
+        if (!payload.jobPostingId) {
+          const jobPostingResponse = await callServer({
+            page,
+            testInfo,
+            route: "job-postings",
+            method: "POST",
+            data: {
+              title: "Senior Engineer",
+              company: "Contoso",
+              location: "Remote",
+              salary: "$150,000",
+              workModel: "Remote",
+              url: "https://example.com/job/7",
+              document: {
+                title: "Senior Engineer",
+                type: "markdown",
+                content: "# Senior Engineer",
+                source: "https://example.com/job/7",
+              },
+            },
+          });
+          payload.jobPostingId = jobPostingResponse.json.id;
+        }
+      }
+
+      if (seed.route === "job-questions" && !payload.jobApplicationId) {
+        const sourceResponse = await callServer({
+          page,
+          testInfo,
+          route: "job-sources",
+          method: "POST",
+          data: { name: "Question Source" },
+        });
+
+        const jobPostingResponse = await callServer({
+          page,
+          testInfo,
+          route: "job-postings",
+          method: "POST",
+          data: {
+            title: "Question Parent Role",
+            company: "Question Parent Company",
+            location: "Remote",
+            salary: "$120,000",
+            workModel: "Remote",
+            url: "https://example.com/question-parent-role",
+            document: {
+              title: "Question Parent Role",
+              type: "markdown",
+              content: "# Question Parent Role",
+              source: "question-parent-role",
+            },
+          },
+        });
+
+        const applicationResponse = await callServer({
+          page,
+          testInfo,
+          route: "job-applications",
+          method: "POST",
+          data: {
+            company: "Question Parent Company",
+            role: "Question Parent Role",
+            appliedOnDate: null,
+            status: 1,
+            sourceId: sourceResponse.json.id,
+            jobPostingId: jobPostingResponse.json.id,
+          },
+        });
+        payload.jobApplicationId = applicationResponse.json.id;
+      }
+
       const response = await callServer({
         page,
         testInfo,
         route: seed.route,
         method: "POST",
-        data: seed.data,
+        data: payload,
       });
 
       seed.created = response.json;

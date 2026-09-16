@@ -13,7 +13,7 @@ create table if not exists document (
     title text not null,
     type text not null,
     content text not null,
-    source text null
+    source text
 );
 
 -- ensure the updated_at column is up to date

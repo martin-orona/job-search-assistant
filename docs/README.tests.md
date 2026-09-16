@@ -269,6 +269,62 @@ The user is able to analyze whether they are qualified for a job posting and how
 
 </details>
 
+## Feature: Job Applications
+
+<details>
+    <summary>expand to see details</summary>
+
+The job searcher at some point has to apply to open positions to get a job.
+
+### Scenario: Navigate to the Job Applications screen
+
+    Given the user is using the JSA
+
+    When the user clicks on the Job Applications tab
+
+    Then the page content will change to display the Job Applications screen
+
+### Scenario: Saved Applications expander starts empty
+
+    Given the user is on the Job Applications screen
+    And the Job Applications tab is selected
+
+    When the user views the Saved Applications section
+
+    Then the Saved Applications expander label is visible
+    And the saved applications list is collapsed by default
+    And the list displays the empty state message: "No saved job applications yet."
+
+### Scenario: Saved Applications expander loads saved job applications from the real server
+
+    Given the user is on the Job Applications screen
+    And the test flow database contains a saved job source and job posting
+    And the test flow database contains a saved Job Application record
+
+    When the user expands the Saved Applications expander
+
+    Then the saved job applications list becomes visible
+    And the list displays the company name, role title, and current status for each saved application
+    And the data reflects the real server record, not an earlier shared database state
+
+### Scenario Outline: Saved Applications use the per-test database flow
+
+    Given the user is on the Job Applications screen
+    And the browser request includes a unique <TestFlowId>
+
+    When the server receives the request
+
+    Then the request is routed to the disposable database for that test flow
+    And any saved application data in that database is isolated from other test runs
+    And the test cleanup removes the temporary database for that flow after the scenario completes
+
+    Examples:
+    | TestFlowId |
+    | X-JSA-Test-Flow |
+    | jsa_test_flow |
+
+</details>
+
 ## Feature: DB Viewer
 
 <details>

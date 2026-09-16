@@ -304,6 +304,21 @@ public class Controller
             return "ai-prompts";
         }
 
+        if (type == typeof(JobApplication))
+        {
+            return "job-applications";
+        }
+
+        if (type == typeof(JobSource))
+        {
+            return "job-sources";
+        }
+
+        if (type == typeof(JobQuestion))
+        {
+            return "job-questions";
+        }
+
         if (type == typeof(Document))
         {
             return "documents";
@@ -320,6 +335,9 @@ public class Controller
             "resumes" => "Resume",
             "ai-prompt-templates" => "AI Prompt Template",
             "ai-prompts" => "AI Prompt",
+            "job-applications" => "Job Application",
+            "job-sources" => "Job Source",
+            "job-questions" => "Job Question",
             "documents" => "Document",
             _ => entityKey,
         };
@@ -332,6 +350,9 @@ public class Controller
             "job-postings" => "AI Prompt",
             "resumes" => "AI Prompt",
             "ai-prompt-templates" => "AI Prompt",
+            "job-applications" => "Job Question",
+            "job-sources" => "Job Application",
+            "job-questions" => "Job Application",
             "documents" => "Job Posting, Resume, AI Prompt Template, or AI Prompt",
             _ => "other",
         };
@@ -372,6 +393,15 @@ public class Controller
             "job-posting" => "job-postings",
             "job_posting" => "job-postings",
             "job-postings" => "job-postings",
+            "job-application" => "job-applications",
+            "job_application" => "job-applications",
+            "job-applications" => "job-applications",
+            "job-source" => "job-sources",
+            "job_source" => "job-sources",
+            "job-sources" => "job-sources",
+            "job-question" => "job-questions",
+            "job_question" => "job-questions",
+            "job-questions" => "job-questions",
             "resume" => "resumes",
             "resumes" => "resumes",
             "ai-prompt-template" => "ai-prompt-templates",
@@ -400,6 +430,27 @@ public class Controller
                 if (jobPosting == null)
                 {
                     throw new NotFoundException($"Record [{id}] not found in [job-postings].");
+                }
+                break;
+            case "job-applications":
+                var jobApplication = await new JobSearchAssistant.DB.Services.JobApplications().Delete(id, connection);
+                if (jobApplication == null)
+                {
+                    throw new NotFoundException($"Record [{id}] not found in [job-applications].");
+                }
+                break;
+            case "job-sources":
+                var jobSource = await new JobSearchAssistant.DB.Services.JobSources().Delete(id, connection);
+                if (jobSource == null)
+                {
+                    throw new NotFoundException($"Record [{id}] not found in [job-sources].");
+                }
+                break;
+            case "job-questions":
+                var jobQuestion = await new JobSearchAssistant.DB.Services.JobQuestions().Delete(id, connection);
+                if (jobQuestion == null)
+                {
+                    throw new NotFoundException($"Record [{id}] not found in [job-questions].");
                 }
                 break;
             case "resumes":
