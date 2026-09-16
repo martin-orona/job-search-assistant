@@ -198,6 +198,25 @@ The JSA has the ability to import data, in the same data format as the export fo
     And the imported records are assigned new database-generated IDs
     And the User sees a list that highlights the imported records
 
+### Scenario Outline: Enumerated fields are rendered as dropdowns in edit forms
+
+The DB Viewer editor uses the domain model's enum values to present a constrained selector instead of free-form text so the user can only choose valid values.
+
+    Given the user is on the DB Viewer tab
+    And there is a saved <Entity> record in the database
+
+    When the user opens the edit form for that record
+
+    Then the <Field> control is displayed as a dropdown
+    And the dropdown includes the allowed values for that enum
+    And the selected value matches the saved record
+
+    Examples:
+    | Entity | Field | Allowed values |
+    | :--- | :--- | :--- |
+    | Job Posting | Work Model | Unknown, Remote, InOffice, Hybrid |
+    | Job Application | Status | Unknown, Draft, Saved, Applied, Interviewing, Offer, Accepted, Rejected, Withdrawn, Ghosted, Other |
+
 </details>
 
 ## Feature: Job Postings

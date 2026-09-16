@@ -47,3 +47,20 @@ only then re-run the related group.
 This keeps the debugging loop small, observable, and reproducible. It avoids
 long periods of churn where the agent is testing many nearby variants without a
 clear signal about what actually broke.
+
+## Single-test validation rule for AI agents
+
+When working on one failing Playwright scenario, target that exact test title with
+an exact grep filter instead of using a broad keyword match.
+
+- Use the full scenario title or a unique, exact phrase that matches only the
+  failing test.
+- Avoid broad terms such as entity names or common feature words unless the goal
+  is intentionally to run a wider validation group.
+- Keep the initial verification loop to one failing scenario and only broaden once
+  that targeted fix has passed.
+- When a broader run is intentional, do so deliberately and document that the
+  purpose is wider validation, not exploratory narrowing.
+
+This keeps test runs fast, precise, and easier to reason about when diagnosing a
+single regression.

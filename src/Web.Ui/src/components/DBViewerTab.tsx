@@ -209,6 +209,8 @@ function toDateInputValue(value: string | null | undefined): string {
 }
 
 const DOCUMENT_TYPE_OPTIONS = ["HTML", "PDF", "Markdown", "Text", "Word", "Other"] as const;
+const WORK_MODEL_OPTIONS = ["Unknown", "Remote", "InOffice", "Hybrid"] as const;
+const APPLICATION_STATUS_OPTIONS = ["Unknown", "Draft", "Saved", "Applied", "Interviewing", "Offer", "Accepted", "Rejected", "Withdrawn", "Ghosted", "Other"] as const;
 
 function normalizeDocumentType(value: string | null | undefined): string {
   const normalized = (value ?? "markdown").trim();
@@ -2658,12 +2660,20 @@ function DBViewerTab() {
                       </label>
                       <label className="db-viewer-editor-label">
                         Work Model
-                        <input
+                        <select
                           id={entity.editorFieldId("work-model")}
-                          type="text"
-                          value={editorState.draft["work-model"] ?? editorState.draft.workModel ?? ""}
-                          onChange={(event) => updateEditorValue(entity.key, "work-model", event.target.value)}
-                        />
+                          value={editorState.draft["work-model"] ?? editorState.draft.workModel ?? "Unknown"}
+                          onChange={(event) => {
+                            updateEditorValue(entity.key, "work-model", event.target.value);
+                            updateEditorValue(entity.key, "workModel", event.target.value);
+                          }}
+                        >
+                          {WORK_MODEL_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="db-viewer-editor-label">
                         URL
@@ -2731,12 +2741,17 @@ function DBViewerTab() {
                       </label>
                       <label className="db-viewer-editor-label">
                         Status
-                        <input
+                        <select
                           id={entity.editorFieldId("status")}
-                          type="text"
                           value={editorState.draft.status ?? "Draft"}
                           onChange={(event) => updateEditorValue(entity.key, "status", event.target.value)}
-                        />
+                        >
+                          {APPLICATION_STATUS_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="db-viewer-editor-label">
                         Source ID
@@ -3034,12 +3049,20 @@ function DBViewerTab() {
                                   </label>
                                   <label className="db-viewer-editor-label">
                                     Work Model
-                                    <input
+                                    <select
                                       id={entity.recordControlId(idField, "editor--work-model")}
-                                      type="text"
-                                      value={editorState.draft.workModel ?? ""}
-                                      onChange={(event) => updateEditorValue(entity.key, "workModel", event.target.value)}
-                                    />
+                                      value={editorState.draft.workModel ?? editorState.draft["work-model"] ?? "Unknown"}
+                                      onChange={(event) => {
+                                        updateEditorValue(entity.key, "workModel", event.target.value);
+                                        updateEditorValue(entity.key, "work-model", event.target.value);
+                                      }}
+                                    >
+                                      {WORK_MODEL_OPTIONS.map((option) => (
+                                        <option key={option} value={option}>
+                                          {option}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </label>
                                   <label className="db-viewer-editor-label">
                                     URL
@@ -3075,6 +3098,70 @@ function DBViewerTab() {
                                       />
                                     </details>
                                   </div>
+                                </>
+                              ) : null}
+
+                              {entity.key === "job-applications" ? (
+                                <>
+                                  <label className="db-viewer-editor-label">
+                                    Company
+                                    <input
+                                      id={entity.recordControlId(idField, "editor--company")}
+                                      type="text"
+                                      value={editorState.draft.company ?? ""}
+                                      onChange={(event) => updateEditorValue(entity.key, "company", event.target.value)}
+                                    />
+                                  </label>
+                                  <label className="db-viewer-editor-label">
+                                    Role
+                                    <input
+                                      id={entity.recordControlId(idField, "editor--role")}
+                                      type="text"
+                                      value={editorState.draft.role ?? ""}
+                                      onChange={(event) => updateEditorValue(entity.key, "role", event.target.value)}
+                                    />
+                                  </label>
+                                  <label className="db-viewer-editor-label">
+                                    Applied on date
+                                    <input
+                                      id={entity.recordControlId(idField, "editor--applied-on-date")}
+                                      type="date"
+                                      value={editorState.draft["applied-on-date"] ?? editorState.draft.appliedOnDate ?? ""}
+                                      onChange={(event) => updateEditorValue(entity.key, "applied-on-date", event.target.value)}
+                                    />
+                                  </label>
+                                  <label className="db-viewer-editor-label">
+                                    Status
+                                    <select
+                                      id={entity.recordControlId(idField, "editor--status")}
+                                      value={editorState.draft.status ?? "Draft"}
+                                      onChange={(event) => updateEditorValue(entity.key, "status", event.target.value)}
+                                    >
+                                      {APPLICATION_STATUS_OPTIONS.map((option) => (
+                                        <option key={option} value={option}>
+                                          {option}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="db-viewer-editor-label">
+                                    Source ID
+                                    <input
+                                      id={entity.recordControlId(idField, "editor--source--id")}
+                                      type="number"
+                                      value={editorState.draft["source--id"] ?? editorState.draft["source-id"] ?? ""}
+                                      onChange={(event) => updateEditorValue(entity.key, "source--id", event.target.value)}
+                                    />
+                                  </label>
+                                  <label className="db-viewer-editor-label">
+                                    Job Posting ID
+                                    <input
+                                      id={entity.recordControlId(idField, "editor--job-posting--id")}
+                                      type="number"
+                                      value={editorState.draft["job-posting--id"] ?? editorState.draft["job-posting-id"] ?? ""}
+                                      onChange={(event) => updateEditorValue(entity.key, "job-posting--id", event.target.value)}
+                                    />
+                                  </label>
                                 </>
                               ) : null}
 
