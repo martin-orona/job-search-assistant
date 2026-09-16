@@ -22,6 +22,10 @@ public class Admin
         group.MapPost("/raw-sql", (Delegate)ExecuteRawSql);
         group.MapGet("/db-snapshot", (Delegate)CreateDailyBackupSnapshot);
         group.MapGet("/db-backups", (Delegate)GetDailyBackupSnapshots);
+        if (Program.IsInDevMode)
+        {
+            group.MapPost("/kill-self", (Delegate)(() => ShutDownServer(app)));
+        }
         group.MapGet("/clean-test-db", (Delegate)((HttpContext context) => TestDatabaseFlow.CleanTestDb(context, app.Environment)));
         return group;
     }
@@ -81,6 +85,17 @@ where work_model in ('0', '1', '2', '3');"
     {
         var snapshots = FileLifecycleManager.GetDailyBackupSnapshots();
         return Task.FromResult<IResult>(Results.Ok(snapshots));
+    }
+
+    public static async Task<IResult> ShutDownServer(WebApplication app)
+    {
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(250);
+            await app.StopAsync();
+        });
+
+        return Results.Ok(new { message = "Server shutdown requested." });
     }
 
     public record RawSqlRequest(string sql);

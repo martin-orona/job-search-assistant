@@ -496,6 +496,12 @@
   /* margin-top: 12px; */
 }
 
+.db-viewer-export-dialog--anchored {
+  margin: 0 0 8px;
+  position: relative;
+  z-index: 1;
+}
+
 .db-viewer-list-item-read-header,
 .db-viewer-list-item-read-line {
   display: flex;

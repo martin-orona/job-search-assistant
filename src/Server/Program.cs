@@ -14,6 +14,9 @@ using JobSearchAssistant.DB;
 public class Program
 {
     public const string RoutePrefix_APIv1 = "/api/v1";
+
+    internal static bool IsInDevMode { get; private set; } = false;
+
     private static readonly HttpClient HttpClient = new HttpClient();
 
     public static void Main(string[] args)
@@ -35,6 +38,8 @@ public class Program
         builder.Services.AddCors();
 
         var app = builder.Build();
+
+        IsInDevMode = IsInDevevelopmentMode(app);
 
         if (builder.Environment.IsDevelopment())
         {
@@ -77,5 +82,16 @@ public class Program
 
         Console.WriteLine("\n[Server] Web service running. Open http://localhost:5000/index.html in your browser.");
         app.Run("http://localhost:5000");
+    }
+
+    internal static bool IsInDevevelopmentMode(WebApplication app)
+    {
+        string coreEnv = app.Environment.EnvironmentName ?? "Unknown";
+        string appMode = app.Configuration["APP_MODE"] ?? Environment.GetEnvironmentVariable("APP_MODE") ?? "Unknown";
+
+        var testEnvs = new[] { "Testing", "Test", "Development", "Dev" };
+        bool isDevEnvironment = testEnvs.Contains(appMode) || testEnvs.Contains(coreEnv);
+
+        return isDevEnvironment;
     }
 }

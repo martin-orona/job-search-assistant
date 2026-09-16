@@ -858,8 +858,10 @@ namespace DbViewer {
       await expect(deleteDialog).toBeVisible({ timeout: 10000 });
       await page.locator("#db-viewer--job-postings--delete-confirm-button").click();
 
-      await expect(deleteDialog).toContainText("AI Prompt records", { timeout: 10000 });
+      const promptReferenceLink = deleteDialog.locator(`a[href='#db-viewer--ai-prompts--record-${promptId}']`);
+      await expect(deleteDialog).toContainText(`AI Prompt ${promptId}`, { timeout: 10000 });
       await expect(deleteDialog).toContainText("Delete the AI Prompt records first", { timeout: 10000 });
+      await expect(promptReferenceLink).toContainText(`AI Prompt ${promptId}`);
       await expect(deleteDialog.getByRole("button", { name: "Delete" })).toHaveCount(0);
       await expect(deleteDialog.getByRole("button", { name: "Dismiss" })).toBeVisible({ timeout: 10000 });
 
@@ -876,6 +878,111 @@ namespace DbViewer {
           { timeout: 10000 },
         )
         .toBeTruthy();
+    });
+
+    test("Scenario: Dismissing a delete failure dialog works with keyboard shortcuts", async ({ page }, testInfo) => {
+      const flowHeaders = getTestHeaders(testInfo);
+
+      const jobPostingResponse = await callServer({
+        page,
+        testInfo,
+        route: "job-postings",
+        method: "POST",
+        data: {
+          title: "Delete Failure Keyboard Test Job Posting",
+          company: "Reference Co",
+          location: "Remote",
+          salary: "$95,000",
+          workModel: "Remote",
+          url: "https://example.com/job/keyboard-dismiss",
+          document: {
+            title: "Delete Failure Keyboard Test Job Posting",
+            type: "markdown",
+            content: "# Delete Failure Keyboard Test Job Posting",
+            source: "https://example.com/job/keyboard-dismiss",
+          },
+        },
+      });
+      const jobPostingId = Number(jobPostingResponse.json.id);
+      expect(jobPostingId > 0, "The source job posting must exist before creating a referencing AI prompt.").toBeTruthy();
+
+      const resumeResponse = await callServer({
+        page,
+        testInfo,
+        route: "resumes",
+        method: "POST",
+        data: {
+          name: "Delete Failure Keyboard Test Resume",
+          jobTitle: "Engineer",
+          date: "2026-01-10",
+          document: { title: "Delete Failure Keyboard Test Resume", type: "markdown", content: "# Resume", source: null },
+        },
+      });
+      const resumeId = Number(resumeResponse.json.id);
+      expect(resumeId > 0, "The source resume must exist before creating a referencing AI prompt.").toBeTruthy();
+
+      const templateResponse = await callServer({
+        page,
+        testInfo,
+        route: "ai-prompt-templates",
+        method: "POST",
+        data: {
+          name: "Delete Failure Keyboard Test Template",
+          document: { title: "Delete Failure Keyboard Test Template", type: "markdown", content: "# Template", source: null },
+        },
+      });
+      const templateId = Number(templateResponse.json.id);
+      expect(templateId > 0, "The source AI prompt template must exist before creating a referencing AI prompt.").toBeTruthy();
+
+      const promptResponse = await callServer({
+        page,
+        testInfo,
+        route: "ai-prompts",
+        method: "POST",
+        data: {
+          name: "Prompt references the target for keyboard dismissal",
+          aiUrl: "https://chat.openai.com",
+          jobPostingId: jobPostingId,
+          resumeId: resumeId,
+          aiPromptTemplateId: templateId,
+          promptDocument: { title: "prompt", type: "markdown", content: "# prompt", source: null },
+          responseDocument: { title: "response", type: "markdown", content: "# response", source: null },
+        },
+      });
+      const promptId = Number(promptResponse.json.id);
+      expect(promptId > 0, "The referencing AI prompt must exist so the target record is under a foreign-key dependency.").toBeTruthy();
+
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+      await page.locator("#db-viewer--job-postings--container--summary").click();
+
+      const deleteButton = page.locator(`#db-viewer--job-postings--delete-button--record-${jobPostingId}`);
+      const deleteDialog = page.locator("#db-viewer--job-postings--delete-dialog");
+      const failureDialog = page.locator("#db-viewer--job-postings--delete-failure-dialog");
+      const dismissalKeys = ["Escape", "Enter", " ", "d", "D"];
+
+      for (const key of dismissalKeys) {
+        await expect(deleteButton).toBeVisible({ timeout: 10000 });
+        await deleteButton.click();
+        await expect(deleteDialog).toBeVisible({ timeout: 10000 });
+        await expect(deleteDialog).toHaveAttribute("role", "dialog");
+
+        await page.locator("#db-viewer--job-postings--delete-confirm-button").focus();
+        await page.keyboard.press("Enter");
+
+        await expect(failureDialog).toBeVisible({ timeout: 10000 });
+        await expect(failureDialog).toHaveAttribute("role", "alertdialog");
+        await failureDialog.focus();
+        await page.keyboard.press(key);
+        await expect(failureDialog).toBeHidden({ timeout: 10000 });
+
+        const response = await page.request.get("http://localhost:5000/api/v1/job-postings?deep=true", { headers: flowHeaders });
+        expect(await response.ok()).toBeTruthy();
+        const records = await response.json();
+        expect(records.some((record: any) => Number(record.id) === jobPostingId)).toBeTruthy();
+
+        await expect(deleteButton).toBeVisible({ timeout: 10000 });
+      }
     });
 
     test("Scenario: Importing an AI Prompt with nested job, resume, and template references succeeds", async ({ page }, testInfo) => {
@@ -1583,7 +1690,8 @@ namespace DbViewer {
       }
     });
 
-    test.describe("Scenario: Referenced records link back to referencing records", () => {
+    // test.describe("Scenario: Referenced records link back to referencing records", () => {
+    test.describe("Scenario Outline: Referenced records show incoming references in the Referenced By section", () => {
       type LocalEntityConfig = DbViewer.EntityConfig & {
         assert: TestAction;
       };
@@ -1609,13 +1717,56 @@ namespace DbViewer {
             throw new Error("Initial record ID not available.");
           }
 
+          const sourceResponse = await callServer({
+            page,
+            testInfo,
+            route: "job-sources",
+            method: "POST",
+            data: { name: "LinkedIn" },
+          });
+
+          const jobApplicationResponse = await callServer({
+            page,
+            testInfo,
+            route: "job-applications",
+            method: "POST",
+            data: {
+              company: "Application Co",
+              role: "Application Role",
+              appliedOnDate: null,
+              status: 1,
+              sourceId: sourceResponse.json.id,
+              jobPostingId: record.id,
+            },
+          });
+
+          const jobApplicationId = Number(jobApplicationResponse.json.id);
+          expect(jobApplicationId > 0, "The job application record should exist for the incoming-reference test.").toBeTruthy();
+
+          await page.reload();
+          await page.getByRole("tab", { name: "DB Viewer" }).click();
+          await page.locator(config.container()).scrollIntoViewIfNeeded();
+          await expandSection({ page, config });
+          await expandRecordDetails({ page, config, entityId: record.id });
+
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
           const recordRow = page.locator(config.recordId(record.id));
           await expect(recordRow).toContainText("Referenced By");
 
+          const aiPromptLink = recordRow.locator(`a[href='#db-viewer--ai-prompts--record-${aiPrompt.id}']`);
+          await expect(aiPromptLink).toContainText(`AI Prompt ${aiPrompt.id} · ${aiPrompt.name}`);
+
+          const jobApplicationLink = recordRow.locator(`a[href='#db-viewer--job-applications--record-${jobApplicationId}']`);
+          await expect(jobApplicationLink).toContainText(`Job Application ${jobApplicationId} · Application Co`);
+
           await verifyBackReferenceWorks(page, recordRow, aiPrompt as { id: number; name: string });
+
+          await expect(jobApplicationLink).toBeVisible();
+          await jobApplicationLink.click();
+          await expect(page.locator(`#db-viewer--job-applications--record-${jobApplicationId}`)).toBeVisible();
+          await expect(page.locator(`#db-viewer--job-applications--container`)).toHaveAttribute("open", "");
         }
       });
 
@@ -1723,7 +1874,8 @@ namespace DbViewer {
         testInfo: TestInfo;
         config: LocalEntityConfig;
       }) {
-        const entityId = await seedTheDatabase({ page, testInfo, seeds: config.seeds });
+        await seedTheDatabase({ page, testInfo, seeds: config.seeds });
+        const targetRecordId = getSeedTargetRecordId(config, config.seeds.primary.created as Record<string, any>);
 
         await page.goto("/");
         await page.getByRole("tab", { name: "DB Viewer" }).click();
@@ -1732,12 +1884,12 @@ namespace DbViewer {
 
         await expandSection({ page, config });
 
-        const recordId = config.recordId(entityId);
+        const recordId = config.recordId(targetRecordId);
 
         const row = page.locator(recordId);
 
         await expect(row).toBeVisible();
-        await expandRecordDetails({ page, config, entityId });
+        await expandRecordDetails({ page, config, entityId: targetRecordId });
 
         await config.assert({ page, config });
 
@@ -1749,6 +1901,33 @@ namespace DbViewer {
         // await referenceLink.click();
         // await expect(page.locator("#db-viewer--ai-prompts--container")).toHaveAttribute("open", "");
         // await expect(page.locator("#db-viewer--ai-prompts--record-101")).toBeVisible();
+      }
+
+      function getSeedTargetRecordId(config: { name: string }, created: Record<string, any> | undefined): number {
+        if (!created) {
+          throw new Error("Expected a seeded record for the incoming-reference test.");
+        }
+
+        const target = (() => {
+          switch (config.name) {
+            case "Job Posting":
+              return created.jobPosting;
+            case "Resume":
+              return created.resume;
+            case "AI Prompt Template":
+              return created.aiPromptTemplate;
+            case "AI Prompt":
+              return created;
+            default:
+              return created;
+          }
+        })();
+
+        if (!target || typeof target.id !== "number" || target.id <= 0) {
+          throw new Error(`Expected a valid seeded target record id for the ${config.name} incoming-reference test.`);
+        }
+
+        return target.id;
       }
 
       async function verifyBackReferenceWorks(page: Page, jobPostingRow: Locator, aiPrompt: { id: number; name: string }) {

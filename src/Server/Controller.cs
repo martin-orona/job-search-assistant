@@ -239,6 +239,15 @@ public class Controller
 
     private static async Task<string> BuildForeignKeyDeleteMessage(string rootEntityKey, string targetEntityKey, string targetLabel, int rootId, SqliteConnection? connection, string referencingLabel)
     {
+        var referencingRecords = await GetReferencingDeleteRecordsAsync(targetEntityKey, rootId, connection);
+        if (referencingRecords.Count > 0)
+        {
+            var distinctLabels = referencingRecords.Select(item => item.EntityLabel).Distinct().ToList();
+            var placedList = string.Join(", ", referencingRecords.Select(item => $"{item.EntityLabel} {item.Id}"));
+            var pluralizedLabel = distinctLabels.Count == 1 ? distinctLabels[0] : string.Join(" and ", distinctLabels);
+            return $"The {targetLabel} record cannot be deleted because it is still referenced by {pluralizedLabel} records: {placedList}. Delete the {pluralizedLabel} records first and try again.";
+        }
+
         if (rootEntityKey == "ai-prompts" && targetEntityKey == "job-postings")
         {
             var referencingIds = (await GetReferencingAiPromptIdsAsync(connection, rootId)).ToList();
@@ -250,6 +259,38 @@ public class Controller
         }
 
         return $"The {targetLabel} record cannot be deleted because it is still referenced by {referencingLabel} records. Delete the {referencingLabel} records first and try again.";
+    }
+
+    private static async Task<List<(string EntityLabel, int Id)>> GetReferencingDeleteRecordsAsync(string targetEntityKey, int targetId, SqliteConnection? connection)
+    {
+        if (connection == null || targetId <= 0)
+        {
+            return new List<(string EntityLabel, int Id)>();
+        }
+
+        return targetEntityKey switch
+        {
+            "job-postings" => (await connection.QueryAsync<int>("select id from ai_prompt where job_posting_id = @TargetId order by id", new { TargetId = targetId }))
+                .Select(id => ("AI Prompt", id))
+                .Concat((await connection.QueryAsync<int>("select id from job_application where job_posting_id = @TargetId order by id", new { TargetId = targetId }))
+                    .Select(id => ("Job Application", id)))
+                .ToList(),
+            "resumes" => (await connection.QueryAsync<int>("select id from ai_prompt where resume_id = @TargetId order by id", new { TargetId = targetId }))
+                .Select(id => ("AI Prompt", id))
+                .Concat((await connection.QueryAsync<int>("select id from job_application where resume_id = @TargetId order by id", new { TargetId = targetId }))
+                    .Select(id => ("Job Application", id)))
+                .ToList(),
+            "ai-prompt-templates" => (await connection.QueryAsync<int>("select id from ai_prompt where ai_prompt_template_id = @TargetId order by id", new { TargetId = targetId }))
+                .Select(id => ("AI Prompt", id))
+                .ToList(),
+            "job-applications" => (await connection.QueryAsync<int>("select id from job_question where job_application_id = @TargetId order by id", new { TargetId = targetId }))
+                .Select(id => ("Job Question", id))
+                .ToList(),
+            "job-sources" => (await connection.QueryAsync<int>("select id from job_application where source_id = @TargetId order by id", new { TargetId = targetId }))
+                .Select(id => ("Job Application", id))
+                .ToList(),
+            _ => new List<(string EntityLabel, int Id)>(),
+        };
     }
 
     private static async Task<IEnumerable<int>> GetReferencingAiPromptIdsAsync(SqliteConnection? connection, int promptId)
@@ -535,4 +576,5 @@ public class Controller
             return (false, default, failure);
         }
     }
+
 }

@@ -175,6 +175,7 @@ The above is rejected — `document.id` (`9`) and `documentId` (`3`) disagree.
 - Do not write race-prone UI tests that assert against unrelated async state changes. A test must wait for the specific browser event or condition that proves the behavior under test; do not assert a final status text while a mount-time refresh, animation, or background update can overwrite it.
 - When a UI state is intentionally transient, assert the lifecycle (for example, add then remove a highlight or class) instead of the final state after the animation has already completed.
 - If a component updates status in several places, the test must account for those side effects explicitly or avoid asserting the stale one altogether.
+- When debugging a failing browser regression, start with a single exact scenario or a focused sibling test in the same spec file. Do not keep broadening the test search with ad hoc CLI variants or speculative edits. Narrow to the real failing case, confirm the reproduction, fix the root cause, then re-run the related group.
 
 ## Documentation
 

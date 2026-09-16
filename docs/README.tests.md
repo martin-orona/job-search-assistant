@@ -419,17 +419,30 @@ The records are taking up a lot of visual space. When there are many records, it
     | AI Prompt Template |
     | AI Prompts |
 
-### Scenario: Referenced records link back to referencing records
+### Scenario Outline: Referenced records show incoming references in the Referenced By section
 
-    Given one record (parent) references another record (child)
+    Given a <TargetEntity> record that has one or more incoming references
     And the user is viewing the referenced record in the DB Viewer
 
-    Then the record displays the referencing record in a Referenced By list
+    Then the record displays a Referenced By section
+    And the record lists each incoming referencing record as a link
 
-    When the user clicks the referencing record link
+    When the user clicks one of the referencing record links
 
-    Then the referencing record's entity expander opens
+    Then the corresponding referencing record's entity expander opens
     And the referencing record is brought into view
+
+    Examples:
+    | TargetEntity | ReferencingEntity |
+    | Job Posting | AI Prompt |
+    | Job Posting | Job Application |
+    | Resume | AI Prompt |
+    | AI Prompt Template | AI Prompt |
+    | Job Source | Job Application |
+    | Job Application | Job Question |
+
+    A target record may legitimately have more than one incoming reference type.
+    For example, a Job Posting may be referenced by both AI Prompt and Job Application records.
 
 ### Scenario Outline: Entity lists can refresh data
 
