@@ -146,6 +146,38 @@ test.describe("Feature: Job Postings", () => {
     await expect(page.getByRole("heading", { name: "Job Postings", exact: true })).toBeVisible();
   });
 
+  test("Scenario: Analyze a saved job posting", async ({ page }, testInfo) => {
+    const first = await callServer({ page, testInfo, route: "job-postings", method: "POST", data: {
+      title: "First posting", company: "Acme", location: "Seattle", salary: "$150,000", workModel: "Hybrid", url: "https://example.com/first",
+      document: { title: "First posting", type: "Markdown", content: "# First posting", source: null },
+    } });
+    expect(first.status).toBe(201);
+    const selected = await callServer({ page, testInfo, route: "job-postings", method: "POST", data: {
+      title: "Platform Engineer", company: "Contoso", location: "Remote", salary: "$160,000", workModel: "Remote", url: "https://example.com/platform",
+      document: { title: "Platform Engineer", type: "Markdown", content: "# Selected posting\nBuild reliable platforms.", source: null },
+    } });
+    expect(selected.status).toBe(201);
+    const loaded = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/api/v1/job-postings");
+    await page.reload();
+    const records = (await (await loaded).json()) as Array<{ id: number }>;
+    const selectedRecord = records.find((record) => record.id === selected.json.id);
+    expect(selectedRecord).toBeDefined();
+    const section = page.locator("#job-postings--saved-job-postings--container");
+    await section.locator("> .header").click();
+    await expect(section.getByRole("button", { name: "Analyze", exact: true })).toHaveCount(2);
+    const row = section.locator(`li[id$='--record-${selected.json.id}']`);
+    const analyze = row.getByRole("button", { name: "Analyze", exact: true });
+    await expect(analyze).toHaveClass(/\bbutton--primary\b/);
+    await analyze.click();
+    await expect(page.getByRole("tab", { name: "Resume Analyzer", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#resume-analyzer--job-description--container > summary")).toContainText("Contoso Platform Engineer");
+    await expect(page.locator("#resume-analyzer--job-description--content--editor")).toHaveValue("# Selected posting\nBuild reliable platforms.");
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("jobSearchAssistant.selectedJobPosting") || "null"))).toEqual(selectedRecord);
+    await page.reload();
+    await expect(page.getByRole("tab", { name: "Resume Analyzer", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#resume-analyzer--job-description--content--editor")).toHaveValue("# Selected posting\nBuild reliable platforms.");
+  });
+
   test("Scenario: Capture a job posting", async ({ page }) => {
     await captureJobPosting(page);
     const jobPostFrame = page.frameLocator("#job-postings--job-post-page--content");

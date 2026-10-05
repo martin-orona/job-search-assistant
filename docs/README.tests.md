@@ -259,6 +259,16 @@ or availability of the live Indeed posting.
 
     Then the page content will change to display the Job Postings screen
 
+### Scenario: Analyze a saved job posting
+
+    Given the Saved Job Postings listing contains two saved postings
+    Then each record has an Analyze button in its header
+    When the user clicks Analyze on one posting
+    Then the Resume Analyzer tab opens with that posting's details and document content
+    And the selected posting retains all server-provided fields unchanged
+    And the button does not toggle the record expander
+    And the selected posting and analyzer tab are retained after a page reload
+
 ### Scenario: Navigate to a job posting
 
     Given the user is on the Job Postings screen

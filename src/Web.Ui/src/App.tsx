@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import { DBViewerTab } from "./components/DBViewerTab";
 import { JobApplicationsTab } from "./components/JobApplicationsTab";
+import type { JobPosting } from "./components/JobPosting";
 import { JobPostingsTab } from "./components/JobPostingsTab";
 import { ResumeAnalyzerTab } from "./components/ResumeAnalyzerTab";
 
@@ -24,25 +25,6 @@ const tabs = [
   },
 ] as const;
 
-export type SavedJobPostingSummary = {
-  id: number;
-  title: string;
-  company: string;
-  location: string;
-  salary: string;
-  workModel: "Unknown" | "Remote" | "InOffice" | "Hybrid";
-  url: string;
-  documentId: number;
-  createdAt: string;
-  document?: {
-    id: number;
-    title: string;
-    type: string;
-    content: string;
-    source: string | null;
-  } | null;
-};
-
 const ACTIVE_TAB_STORAGE_KEY = "jobSearchAssistant.activeTab";
 const SELECTED_JOB_POSTING_STORAGE_KEY = "jobSearchAssistant.selectedJobPosting";
 
@@ -57,13 +39,13 @@ function getStoredActiveTab(): TabId {
   return isTabId(stored) ? stored : tabs[0].id;
 }
 
-function getStoredSelectedJobPosting(): SavedJobPostingSummary | null {
+function getStoredSelectedJobPosting(): JobPosting | null {
   const stored = localStorage.getItem(SELECTED_JOB_POSTING_STORAGE_KEY);
   if (!stored) {
     return null;
   }
   try {
-    return JSON.parse(stored) as SavedJobPostingSummary;
+    return JSON.parse(stored) as JobPosting;
   } catch {
     return null;
   }
@@ -71,7 +53,7 @@ function getStoredSelectedJobPosting(): SavedJobPostingSummary | null {
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>(getStoredActiveTab);
-  const [selectedJobPosting, setSelectedJobPosting] = useState<SavedJobPostingSummary | null>(getStoredSelectedJobPosting);
+  const [selectedJobPosting, setSelectedJobPosting] = useState<JobPosting | null>(getStoredSelectedJobPosting);
 
   useEffect(() => {
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
@@ -110,7 +92,12 @@ function App() {
 
         <div id={`${activeTabData.id}-panel`} role="tabpanel" aria-labelledby={`${activeTabData.id}-tab`} className="tab-panel">
           {activeTab === "job-listings" ? (
-            <JobPostingsTab />
+            <JobPostingsTab
+              onAnalyze={(jobPosting) => {
+                setSelectedJobPosting(jobPosting);
+                setActiveTab("resume-analyzer");
+              }}
+            />
           ) : activeTab === "job-applications" ? (
             <JobApplicationsTab />
           ) : activeTab === "resume-analyzer" ? (

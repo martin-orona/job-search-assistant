@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SavedJobPostingSummary } from "../App";
+import type { JobPosting } from "./JobPosting";
 import { AiPromptUi, type AiPrompt } from "./AiPrompt";
 import { AiPromptTemplateUi, type AiPromptTemplate } from "./AiPromptTemplate";
 import type { Entity } from "./Entity";
@@ -44,7 +44,7 @@ function extractMatchPercent(responseContent: string | null | undefined) {
 }
 
 type ResumeAnalyzerTabProps = {
-  jobPosting: SavedJobPostingSummary | null;
+  jobPosting: JobPosting | null;
 };
 
 function toDateInputValue(value: string): string {

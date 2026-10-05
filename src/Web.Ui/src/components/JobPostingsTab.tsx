@@ -348,9 +348,11 @@ function extractJobPosting(snapshot: CapturedSnapshot): ExtractedJobPosting {
   return extractGenericJobPosting(snapshot);
 }
 
-type JobPostingsTabProps = {};
+type JobPostingsTabProps = {
+  onAnalyze: (jobPosting: JobPosting) => void;
+};
 
-export function JobPostingsTab({}: JobPostingsTabProps) {
+export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
   const [urlInput, setUrlInput] = useState(() => {
     return window.localStorage.getItem(jobPostUrlStorageKey) ?? "";
   });
@@ -645,6 +647,7 @@ export function JobPostingsTab({}: JobPostingsTabProps) {
         onCollapsed={() => setSavedOpen(false)}
         data={savedJobPostings as JobPosting[]}
         reloadData={async () => await refreshSavedJobPostings(true)}
+        onAnalyze={onAnalyze}
         onCreateRecord={createNewJobPosting}
         onRemoveRecord={onRemoveJobPostingFromDisplay}
         onSave={saveJobPosting}
@@ -743,6 +746,7 @@ function SavedJobPostings({
   onCollapsed,
   data,
   reloadData,
+  onAnalyze,
   onCreateRecord,
   onRemoveRecord,
   onSave,
@@ -757,6 +761,7 @@ function SavedJobPostings({
   onCollapsed: () => void;
   data: JobPosting[];
   reloadData: () => Promise<void>;
+  onAnalyze: (jobPosting: JobPosting) => void;
   onCreateRecord: () => void;
   onRemoveRecord: (id: number) => void;
   onSave: (params: { posting: JobPosting; shouldPropagateError?: boolean }) => Promise<void>;
@@ -784,6 +789,20 @@ function SavedJobPostings({
       onSave={async ({ entity }) => await onSave({ posting: entity, shouldPropagateError: true })}
       ListItemUi={JobPostingUi}
       itemPropName="posting"
+      renderRecordActions={(jobPosting) => (
+        <button
+          id={`job-postings--saved-job-postings--analyze-button--${jobPosting.id}`}
+          type="button"
+          className="button button--primary"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onAnalyze(jobPosting);
+          }}
+        >
+          Analyze
+        </button>
+      )}
       onDelete={({ id }) => onDelete({ id, shouldPropagateError: true })}
       deletionErrors={deletionErrors}
       setDeletionError={setDeletionError}
