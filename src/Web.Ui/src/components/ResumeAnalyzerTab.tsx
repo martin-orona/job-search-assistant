@@ -15,6 +15,7 @@ type SavedResume = Resume;
 type SavedAiPrompt = AiPrompt;
 
 const DOCUMENT_TYPE_OPTIONS = ["HTML", "PDF", "Markdown", "Text", "Word", "Other"] as const;
+const AI_NAME_STORAGE_KEY = "jobSearchAssistant.resumeAnalyzer.aiName";
 
 // Best-effort guess used only when the user hasn't designated a document type.
 function detectDocumentType(content: string): string {
@@ -205,6 +206,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
   const [templateName, setTemplateName] = useState(() => getStoredLoadedTemplate().name);
   const [templateContent, setTemplateContent] = useState(() => getStoredLoadedTemplate().template);
   const [aiUrl, setAiUrl] = useState(() => localStorage.getItem(AI_URL_STORAGE_KEY) || "");
+  const [aiName, setAiName] = useState(() => localStorage.getItem(AI_NAME_STORAGE_KEY) || "");
   const [aiPromptContent, setAiPromptContent] = useState(() => localStorage.getItem(AI_PROMPT_CONTENT_STORAGE_KEY) || "");
   const [aiResponseText, setAiResponseText] = useState(() => localStorage.getItem(AI_RESPONSE_STORAGE_KEY) || "");
   const [status, setStatus] = useState("Ready");
@@ -235,6 +237,10 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
   useEffect(() => {
     localStorage.setItem(AI_URL_STORAGE_KEY, aiUrl);
   }, [aiUrl]);
+
+  useEffect(() => {
+    localStorage.setItem(AI_NAME_STORAGE_KEY, aiName);
+  }, [aiName]);
 
   useEffect(() => {
     localStorage.setItem(AI_PROMPT_CONTENT_STORAGE_KEY, aiPromptContent);
@@ -470,6 +476,10 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
       setStatus("Generate or enter prompt content before saving the AI prompt.");
       return;
     }
+    if (!aiName.trim()) {
+      setStatus("Enter an AI name before saving the AI prompt.");
+      return;
+    }
 
     const name = `${resumeName || "Resume"} vs ${jobPosting.title || "Job Posting"}`.trim();
 
@@ -478,6 +488,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name,
+        aiName: aiName.trim(),
         aiUrl,
         jobPostingId: jobPosting.id,
         resumeId: Number(resumeId),
@@ -636,6 +647,14 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
 
           <div id="resume-analyzer--ai-prompt--editor--container" className="resume-analyzer-card">
             <input
+              id="resume-analyzer--ai-prompt--editor--ai-name"
+              type="text"
+              value={aiName}
+              onChange={(event) => setAiName(event.target.value)}
+              placeholder="AI Name"
+              aria-label="AI Name"
+            />
+            <input
               id="resume-analyzer--ai-prompt--editor--ai-url"
               type="url"
               value={aiUrl}
@@ -706,6 +725,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
               event.stopPropagation();
               setAiPromptContent(prompt.promptDocument?.content ?? "");
               setAiResponseText(prompt.responseDocument?.content ?? "");
+              setAiName(prompt.aiName);
               setAiUrl(prompt.aiUrl);
               setStatus(`Loaded AI prompt: ${prompt.name}`);
             }}>Load</button>}

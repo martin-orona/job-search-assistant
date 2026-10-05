@@ -207,6 +207,7 @@ test.describe("Feature: Resume Analyzer", () => {
         [
           "#resume-analyzer--ai-prompt--ai-url",
           "#resume-analyzer--ai-prompt--editor--ai-url",
+          "#resume-analyzer--ai-prompt--editor--ai-name",
           "#resume-analyzer--resume--editor--name",
           "#resume-analyzer--resume--editor--job-title",
           "#resume-analyzer--resume--editor--date",
@@ -329,6 +330,69 @@ test.describe("Feature: Resume Analyzer", () => {
     );
   });
 
+  test("Scenario: Saving an analyzer AI prompt includes the required AI name", async ({ page }, testInfo) => {
+    const document = { title: "Save regression", type: "Markdown", content: "Save regression content", source: null };
+    const posting = await callServer({ page, testInfo, route: "job-postings", method: "POST", data: {
+      title: "Engineer", company: "Contoso", location: "Remote", salary: "$150,000", workModel: "Remote", url: "https://example.com/job", document,
+    } });
+    const resume = await callServer({ page, testInfo, route: "resumes", method: "POST", data: {
+      name: "Jane Doe", jobTitle: "Engineer", date: "2026-10-05", document,
+    } });
+    const template = await callServer({ page, testInfo, route: "ai-prompt-templates", method: "POST", data: {
+      name: "Candidate summary", document,
+    } });
+    await page.goto("/");
+    await page.evaluate(({ posting, resume, template }) => {
+      localStorage.setItem("jobSearchAssistant.selectedJobPosting", JSON.stringify(posting));
+      localStorage.setItem("jobSearchAssistant.resumeAnalyzer.loadedResume", JSON.stringify({
+        id: String(resume.id), name: resume.name, jobTitle: resume.jobTitle, date: resume.date,
+        documentId: String(resume.documentId), documentType: resume.document.type, content: resume.document.content,
+      }));
+      localStorage.setItem("jobSearchAssistant.resumeAnalyzer.loadedTemplate", JSON.stringify({
+        id: String(template.id), name: template.name, template: template.document.content,
+      }));
+    }, { posting: posting.json, resume: resume.json, template: template.json });
+    await page.goto("/");
+    await page.getByRole("tab", { name: "Resume Analyzer" }).click();
+    for (const selector of ["#resume-analyzer--ai-prompt--container", "#resume-analyzer--ai-prompt--editor--prompt--container", "#resume-analyzer--ai-prompt--editor--ai-response--container"]) {
+      const expander = page.locator(selector);
+      if (!(await expander.evaluate((element) => element.hasAttribute("open")))) await expander.locator("> summary").click();
+    }
+    await page.locator("#resume-analyzer--ai-prompt--editor--ai-url").fill("https://copilot.microsoft.com");
+    await page.locator("#resume-analyzer--ai-prompt--editor--ai-prompt-editor").fill("Analyze this candidate.");
+    await page.locator("#resume-analyzer--ai-prompt--editor--ai-response--editor").fill("Match Percentage: 92%");
+    const section = page.locator("#resume-analyzer--ai-prompt--saved-ai-prompts--container");
+    await expect(section.locator("> .header .count")).toHaveText("0 record(s)");
+    await expect(page.locator("#resume-analyzer--saved-resumes--container > .header .count")).toHaveText("1 record(s)");
+    await expect(page.locator("#resume-analyzer--saved-prompt-templates--container > .header .count")).toHaveText("1 record(s)");
+    const submissions: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/ai-prompts/") submissions.push(request.url());
+    });
+    await page.locator("#resume-analyzer--ai-prompt--save-ai-prompt-button").click();
+    await expect(page.locator(".resume-analyzer-status")).toHaveText("Enter an AI name before saving the AI prompt.");
+    expect(submissions).toHaveLength(0);
+    await page.locator("#resume-analyzer--ai-prompt--editor--ai-name").fill("  Copilot  ");
+    const saved = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/v1/ai-prompts/");
+    await page.locator("#resume-analyzer--ai-prompt--save-ai-prompt-button").click();
+    const response = await saved;
+    expect(response.status(), await response.text()).toBe(201);
+    expect(response.request().postDataJSON()).toMatchObject({
+      aiName: "Copilot", jobPostingId: posting.json.id, resumeId: resume.json.id, aiPromptTemplateId: template.json.id,
+    });
+    const created = await response.json();
+    expect(created.aiName).toBe("Copilot");
+    await expect(section.locator("> .header .count")).toHaveText("1 record(s)");
+    if (!(await section.evaluate((element) => element.classList.contains("expanded")))) await section.locator("> .header").click();
+    const row = section.locator(`li[id$='--record-${created.id}']`);
+    await expect(row).toContainText("Jane Doe vs Engineer");
+    await page.locator("#resume-analyzer--ai-prompt--editor--ai-name").fill("Different AI");
+    await row.getByRole("button", { name: "Load", exact: true }).click();
+    await expect(page.locator("#resume-analyzer--ai-prompt--editor--ai-name")).toHaveValue("Copilot");
+    await page.reload();
+    await expect(page.locator("#resume-analyzer--ai-prompt--editor--ai-name")).toHaveValue("Copilot");
+  });
+
   test("Scenario: Save failure for the AI prompt includes the server reason", async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem(
@@ -381,6 +445,7 @@ test.describe("Feature: Resume Analyzer", () => {
       const requestBody = route.request().postDataJSON();
       expect(requestBody).toMatchObject({
         name: "Jane Doe vs Senior Developer",
+        aiName: "Copilot",
         aiUrl: "https://example.com",
         jobPostingId: 42,
         resumeId: 9,
@@ -406,6 +471,7 @@ test.describe("Feature: Resume Analyzer", () => {
 
     await page.locator("#resume-analyzer--ai-prompt--container > summary").click();
     await page.locator("#resume-analyzer--ai-prompt--editor--prompt--container > summary").click();
+    await page.locator("#resume-analyzer--ai-prompt--editor--ai-name").fill("Copilot");
     await page.locator("#resume-analyzer--ai-prompt--editor--ai-url").fill("https://example.com");
     await page.locator("#resume-analyzer--ai-prompt--editor--ai-prompt-editor").fill("Generate a response for this candidate.");
     await page.locator("#resume-analyzer--ai-prompt--save-ai-prompt-button").click();

@@ -134,6 +134,7 @@ The various UI components that have state, remember it so that the next time the
     | Resume Analyzer | #resume-analyzer--ai-prompt--ai-url |
     | Resume Analyzer | #resume-analyzer--ai-prompt--editor |
     | Resume Analyzer | #resume-analyzer--ai-prompt--editor--ai-url |
+    | Resume Analyzer | #resume-analyzer--ai-prompt--editor--ai-name |
     | Resume Analyzer | #resume-analyzer--resume--editor--name |
     | Resume Analyzer | #resume-analyzer--resume--editor--job-title |
     | Resume Analyzer | #resume-analyzer--resume--editor--date |
@@ -315,6 +316,18 @@ or availability of the live Indeed posting.
 </details>
 
 ## Feature: Resume Analyzer
+
+### Scenario: Saving an analyzer AI prompt includes the required AI name
+
+    Given the analyzer has a saved job posting, resume, and prompt template
+    And the user has entered prompt content and an AI URL
+    When the user saves with an empty AI Name
+    Then the analyzer asks for an AI name without sending a save request
+    When the user enters an AI Name and saves
+    Then the server creates the AI prompt with the trimmed AI name and linked record IDs
+    And the saved prompt appears in Saved AI Prompts
+    And Load restores its AI name
+    And the AI name survives a page reload
 
 ### Scenario Outline: Saved entities use standardized listings
 
