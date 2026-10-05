@@ -1,9 +1,10 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useSimpleDialogErrors } from "../utilities/componentState";
-import { toDateInputValue } from "../utilities/uiFormatting";
 import { getPatch } from "../utilities/entities";
+import { toDateInputValue } from "../utilities/uiFormatting";
 import { AiPromptUi, type AiPrompt } from "./AiPrompt";
 import { AiPromptTemplateUi, type AiPromptTemplate } from "./AiPromptTemplate";
+import { DeleteDialog } from "./Dialog";
 import type { DeleteEntityHandler, DeleteEntityParams, Entity, EntityKey, SaveEntityParams } from "./Entity";
 import { EntitySection as SharedEntitySection } from "./EntitySection";
 import { ActionableExpander_new, ExpandableDataList_new } from "./Expander";
@@ -12,7 +13,6 @@ import { JobPostingUi, type JobPosting } from "./JobPosting";
 import { JobQuestionUi, type JobQuestion } from "./JobQuestion";
 import { JobSourceUi, type JobSource } from "./JobSource";
 import { ReferencedByDisplay } from "./ReferencedByDisplay";
-import { DeleteDialog } from "./Dialog";
 import { ResumeUi, type Resume } from "./Resume";
 
 type RecordReference = {
@@ -1205,7 +1205,15 @@ function DBViewerEntitySection<T extends Entity>({
   );
 }
 
-function DBViewerDeleteDialog<T extends Entity>({ config, itemId, references, renderRecordChildren, onDelete, onConfirm, onCancel }: {
+function DBViewerDeleteDialog<T extends Entity>({
+  config,
+  itemId,
+  references,
+  renderRecordChildren,
+  onDelete,
+  onConfirm,
+  onCancel,
+}: {
   config: EntityConfig<T>;
   itemId: number;
   references: DeleteReference[];
@@ -1235,30 +1243,33 @@ function DBViewerDeleteDialog<T extends Entity>({ config, itemId, references, re
         }
       }}
     >
-      {error ? record && renderRecordChildren(record) : references.length > 0 && (
-        <div>
-          <p>Related records to include in the deletion:</p>
-          {references.map((reference) => (
-            <label key={`${reference.entityKey}:${reference.id}`}>
-              <input
-                id={config.deleteReferenceCheckboxId(reference.entityKey, reference.id)}
-                type="checkbox"
-                checked={selected.has(`${reference.entityKey}:${reference.id}`)}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setSelected((current) => {
-                    const next = new Set(current);
-                    const key = `${reference.entityKey}:${reference.id}`;
-                    if (checked) next.add(key); else next.delete(key);
-                    return next;
-                  });
-                }}
-              />
-              {reference.label}
-            </label>
-          ))}
-        </div>
-      )}
+      {error
+        ? record && renderRecordChildren(record)
+        : references.length > 0 && (
+            <div>
+              <p>Related records to include in the deletion:</p>
+              {references.map((reference) => (
+                <label key={`${reference.entityKey}:${reference.id}`}>
+                  <input
+                    id={config.deleteReferenceCheckboxId(reference.entityKey, reference.id)}
+                    type="checkbox"
+                    checked={selected.has(`${reference.entityKey}:${reference.id}`)}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setSelected((current) => {
+                        const next = new Set(current);
+                        const key = `${reference.entityKey}:${reference.id}`;
+                        if (checked) next.add(key);
+                        else next.delete(key);
+                        return next;
+                      });
+                    }}
+                  />
+                  {reference.label}
+                </label>
+              ))}
+            </div>
+          )}
     </DeleteDialog>
   );
 }
@@ -1440,7 +1451,7 @@ function ExportDialog<T extends { id?: number }>({
             closeExportDialog();
           }}
         >
-          Confirm export
+          Export
         </button>
         <button id={config.exportCancelButtonId} type="button" className="button button--secondary" onClick={() => closeExportDialog()}>
           Cancel
