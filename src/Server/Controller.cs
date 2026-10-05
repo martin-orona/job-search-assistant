@@ -283,7 +283,7 @@ public class Controller
             "ai-prompt-templates" => (await connection.QueryAsync<int>("select id from ai_prompt where ai_prompt_template_id = @TargetId order by id", new { TargetId = targetId }))
                 .Select(id => ("AI Prompt", id))
                 .ToList(),
-            "job-applications" => (await connection.QueryAsync<int>("select id from job_question where job_application_id = @TargetId order by id", new { TargetId = targetId }))
+            "job-applications" => (await connection.QueryAsync<int>("select jq.id from job_question jq inner join job_application_question jaq on jaq.job_question_id = jq.id where jaq.job_application_id = @TargetId order by jq.id", new { TargetId = targetId }))
                 .Select(id => ("Job Question", id))
                 .ToList(),
             "job-sources" => (await connection.QueryAsync<int>("select id from job_application where source_id = @TargetId order by id", new { TargetId = targetId }))

@@ -1,9 +1,11 @@
 ﻿namespace JobSearchAssistant.DB.Services;
 
+using System.Collections;
 using System.Collections.Frozen;
 using System.ComponentModel.DataAnnotations;
 using System.Data;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 
 using Dapper;
@@ -209,6 +211,11 @@ public class CRUD
 
             // assign the newly created child model properties for response
             AssignModelProperties(record, modelProperties);
+
+            if (record is JobApplication application && data is JobApplication inputApplication)
+            {
+                application.Questions = await JobApplications.SaveQuestions(application.Id, inputApplication.Questions, connection, transaction);
+            }
 
             return record;
         }
@@ -548,6 +555,11 @@ public class CRUD
                 }
             }
 
+            if (record is JobApplication application && data is JobApplication inputApplication)
+            {
+                application.Questions = await JobApplications.SaveQuestions(application.Id, inputApplication.Questions, connection, transaction);
+            }
+
             return record;
         }
         catch (Exception ex)
@@ -660,7 +672,7 @@ public class CRUD
 
         var validProperties = CrudInfo[typeof(T)].ValidProperties;
         var (propertySetList, parameters) = BuildUpdateSetList(patchFields, validProperties);
-        if (propertySetList.Count == 0)
+        if (propertySetList.Count == 0 && modelValues.Count == 0)
         {
             throw new BadRequestException("No updatable fields were provided in the request.");
         }
@@ -669,7 +681,9 @@ public class CRUD
 
         try
         {
-            var sql = QueryBuilder.BuildUpdate(tableName, propertySetList);
+            var sql = propertySetList.Count > 0
+                ? QueryBuilder.BuildUpdate(tableName, propertySetList)
+                : $"select * from {tableName} where id = @Id";
             var record = await connection.QueryFirstOrDefaultAsync<T>(sql, parameters);
 
             if (record == null)
@@ -685,6 +699,13 @@ public class CRUD
                     var value = kvp.Value;
                     property.SetValue(record, value);
                 }
+            }
+
+            var questionsField = patchFields.FirstOrDefault(field => field.Key.Equals(nameof(JobApplication.Questions), StringComparison.OrdinalIgnoreCase));
+            if (record is JobApplication application && questionsField.Key != null)
+            {
+                var questions = (List<JobQuestion>?)ConvertPatchValue(questionsField.Value, typeof(List<JobQuestion>)) ?? [];
+                application.Questions = await JobApplications.SaveQuestions(application.Id, questions, connection, transaction);
             }
 
             return record;
@@ -789,96 +810,174 @@ public class CRUD
     private static IReadOnlyList<T> MapDeepRows<T>(IEnumerable<dynamic> rows) where T : Model
     {
         var modelType = typeof(T);
-        var baseScalarProperties = QueryBuilder.GetBaseScalarProperties(modelType);
         var nestedModelMetadata = QueryBuilder.GetDeepModelMetadata(modelType);
         var results = new List<T>();
+        var instanceMap = new Dictionary<int, T>();
 
         foreach (var row in rows)
         {
             var valueMap = ((IDictionary<string, object?>)row).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
-            var instance = (T)Activator.CreateInstance(modelType)!;
-
-            foreach (var property in baseScalarProperties)
+            var rowId = valueMap.TryGetValue("id", out var rawId) ? Convert.ToInt32(rawId) : 0;
+            if (rowId == 0)
             {
-                var snakeCaseName = Formatting.PascalToSnakeCase(property.Name);
-                if (!valueMap.TryGetValue(snakeCaseName, out var rawValue) || rawValue == null)
-                {
-                    continue;
-                }
-
-                var convertedValue = ConvertValue(rawValue, property.PropertyType);
-                if (convertedValue != null)
-                {
-                    property.SetValue(instance, convertedValue);
-                }
+                continue;
             }
+
+            if (!instanceMap.TryGetValue(rowId, out var instance))
+            {
+                instance = (T)Activator.CreateInstance(modelType)!;
+                instanceMap[rowId] = instance;
+                results.Add(instance);
+            }
+
+            ApplyMappedValues(instance, modelType, valueMap);
 
             foreach (var nestedMetadata in nestedModelMetadata)
             {
-                var nestedType = nestedMetadata.PropertyType;
-                var nestedPrefix = nestedMetadata.Alias;
-                var nestedInstance = Activator.CreateInstance(nestedType)!;
-                var nestedScalars = QueryBuilder.GetBaseScalarProperties(nestedType);
-                var hasNestedValues = false;
-
-                foreach (var scalarProperty in nestedScalars)
+                if (nestedMetadata.IsCollection)
                 {
-                    var snakeCaseName = Formatting.PascalToSnakeCase(scalarProperty.Name);
-                    var key = $"{nestedPrefix}_{snakeCaseName}";
-                    if (!valueMap.TryGetValue(key, out var rawValue) || rawValue == null)
+                    var collectionItemType = nestedMetadata.ElementType;
+                    var collectionItem = CreateDeepNestedModelFromRow(collectionItemType, nestedMetadata.Alias, valueMap);
+                    if (collectionItem == null)
                     {
                         continue;
                     }
 
-                    var convertedValue = ConvertValue(rawValue, scalarProperty.PropertyType);
-                    if (convertedValue != null)
+                    var collection = nestedMetadata.Property.GetValue(instance) as System.Collections.IList ?? (System.Collections.IList)Activator.CreateInstance(nestedMetadata.Property.PropertyType)!;
+                    var existing = collection.Cast<object?>().FirstOrDefault(item => item is Model model && model.Id == ((Model)collectionItem).Id);
+                    if (existing == null)
                     {
-                        scalarProperty.SetValue(nestedInstance, convertedValue);
-                        hasNestedValues = true;
+                        collection.Add(collectionItem);
+                        nestedMetadata.Property.SetValue(instance, collection);
                     }
+
+                    continue;
                 }
 
-                if (typeof(ModelWithDocument).IsAssignableFrom(nestedType) && nestedType != typeof(Document))
+                var modelItemType = nestedMetadata.PropertyType;
+                var modelItem = CreateDeepNestedModelFromRow(modelItemType, nestedMetadata.Alias, valueMap);
+                if (modelItem == null)
                 {
-                    var documentProperty = nestedType.GetProperty(nameof(ModelWithDocument.Document));
-                    var documentInstance = (Document?)Activator.CreateInstance(typeof(Document));
-                    var documentScalars = QueryBuilder.GetBaseScalarProperties(typeof(Document));
-                    var hasDocumentValues = false;
-
-                    foreach (var documentScalar in documentScalars)
-                    {
-                        var snakeCaseName = Formatting.PascalToSnakeCase(documentScalar.Name);
-                        var key = $"{nestedPrefix}_document_{snakeCaseName}";
-                        if (!valueMap.TryGetValue(key, out var rawValue) || rawValue == null)
-                        {
-                            continue;
-                        }
-
-                        var convertedValue = ConvertValue(rawValue, documentScalar.PropertyType);
-                        if (convertedValue != null)
-                        {
-                            documentScalar.SetValue(documentInstance, convertedValue);
-                            hasDocumentValues = true;
-                        }
-                    }
-
-                    if (hasDocumentValues)
-                    {
-                        documentProperty?.SetValue(nestedInstance, documentInstance);
-                        hasNestedValues = true;
-                    }
+                    continue;
                 }
 
-                if (hasNestedValues)
-                {
-                    nestedMetadata.Property.SetValue(instance, nestedInstance);
-                }
+                nestedMetadata.Property.SetValue(instance, modelItem);
             }
-
-            results.Add(instance);
         }
 
         return results;
+    }
+
+    private static void ApplyMappedValues(object instance, Type modelType, Dictionary<string, object?> valueMap)
+    {
+        foreach (var property in QueryBuilder.GetBaseScalarProperties(modelType))
+        {
+            var snakeCaseName = Formatting.PascalToSnakeCase(property.Name);
+            if (!valueMap.TryGetValue(snakeCaseName, out var rawValue) || rawValue == null)
+            {
+                continue;
+            }
+
+            var convertedValue = ConvertValue(rawValue, property.PropertyType);
+            if (convertedValue != null)
+            {
+                property.SetValue(instance, convertedValue);
+            }
+        }
+
+        foreach (var jsonListProperty in QueryBuilder.GetJsonListProperties(modelType))
+        {
+            var snakeCaseName = Formatting.PascalToSnakeCase(jsonListProperty.Name);
+            if (!valueMap.TryGetValue(snakeCaseName, out var rawValue) || rawValue == null)
+            {
+                continue;
+            }
+
+            var convertedValue = ConvertValue(rawValue, jsonListProperty.PropertyType);
+            if (convertedValue != null)
+            {
+                jsonListProperty.SetValue(instance, convertedValue);
+            }
+        }
+    }
+
+    private static object? CreateDeepNestedModelFromRow(Type nestedType, string nestedAlias, Dictionary<string, object?> valueMap)
+    {
+        var nestedInstance = Activator.CreateInstance(nestedType);
+        if (nestedInstance == null)
+        {
+            return null;
+        }
+
+        var hasNestedValues = false;
+        var nestedScalars = QueryBuilder.GetBaseScalarProperties(nestedType);
+
+        foreach (var scalarProperty in nestedScalars)
+        {
+            var snakeCaseName = Formatting.PascalToSnakeCase(scalarProperty.Name);
+            var key = $"{nestedAlias}_{snakeCaseName}";
+            if (!valueMap.TryGetValue(key, out var rawValue) || rawValue == null)
+            {
+                continue;
+            }
+
+            var convertedValue = ConvertValue(rawValue, scalarProperty.PropertyType);
+            if (convertedValue != null)
+            {
+                scalarProperty.SetValue(nestedInstance, convertedValue);
+                hasNestedValues = true;
+            }
+        }
+
+        foreach (var jsonListProperty in QueryBuilder.GetJsonListProperties(nestedType))
+        {
+            var snakeCaseName = Formatting.PascalToSnakeCase(jsonListProperty.Name);
+            var key = $"{nestedAlias}_{snakeCaseName}";
+            if (!valueMap.TryGetValue(key, out var rawValue) || rawValue == null)
+            {
+                continue;
+            }
+
+            var convertedValue = ConvertValue(rawValue, jsonListProperty.PropertyType);
+            if (convertedValue != null)
+            {
+                jsonListProperty.SetValue(nestedInstance, convertedValue);
+                hasNestedValues = true;
+            }
+        }
+
+        if (typeof(ModelWithDocument).IsAssignableFrom(nestedType) && nestedType != typeof(Document))
+        {
+            var documentProperty = nestedType.GetProperty(nameof(ModelWithDocument.Document));
+            var documentInstance = Activator.CreateInstance(typeof(Document));
+            var documentScalars = QueryBuilder.GetBaseScalarProperties(typeof(Document));
+            var hasDocumentValues = false;
+
+            foreach (var documentScalar in documentScalars)
+            {
+                var snakeCaseName = Formatting.PascalToSnakeCase(documentScalar.Name);
+                var key = $"{nestedAlias}_document_{snakeCaseName}";
+                if (!valueMap.TryGetValue(key, out var rawValue) || rawValue == null)
+                {
+                    continue;
+                }
+
+                var convertedValue = ConvertValue(rawValue, documentScalar.PropertyType);
+                if (convertedValue != null)
+                {
+                    documentScalar.SetValue(documentInstance, convertedValue);
+                    hasDocumentValues = true;
+                }
+            }
+
+            if (hasDocumentValues)
+            {
+                documentProperty?.SetValue(nestedInstance, documentInstance);
+                hasNestedValues = true;
+            }
+        }
+
+        return hasNestedValues ? nestedInstance : null;
     }
 
     private static object? ConvertValue(object? rawValue, Type targetType)
@@ -954,6 +1053,20 @@ public class CRUD
             return Convert.ToDecimal(value);
         }
 
+        if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(List<>))
+        {
+            if (value is byte[] bytes)
+            {
+                var json = Encoding.UTF8.GetString(bytes);
+                return JsonSerializer.Deserialize(json, targetType) ?? Activator.CreateInstance(targetType);
+            }
+
+            if (value is string jsonText)
+            {
+                return JsonSerializer.Deserialize(jsonText, targetType) ?? Activator.CreateInstance(targetType);
+            }
+        }
+
         if (Nullable.GetUnderlyingType(targetType) is var nullableType && nullableType != null)
         {
             return ConvertValue(value, nullableType);
@@ -962,12 +1075,14 @@ public class CRUD
         return Convert.ChangeType(value, targetType);
     }
 
+    // TODO: review this, it smells. Why do we need a flattening of the AiPrompt model like this? It creates a maintenance problem. When AI added the AiName property, it failed to add it to this class, so it isn't theoretical issues, it has already happened.
     private sealed class AiPromptDeepRow
     {
         public int Id { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset UpdatedAt { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string AiName { get; set; } = string.Empty;
         public string AiUrl { get; set; } = string.Empty;
         public int JobPostingId { get; set; }
         public int ResumeId { get; set; }
@@ -1032,14 +1147,20 @@ public class CRUD
 
             var snake = Formatting.PascalToSnakeCase(property.Name);
             setList.Add($"{snake} = @{property.Name}");
+
             if (property.PropertyType.IsEnum && dbValue is not null)
             {
                 parameters.Add(property.Name, dbValue.ToString(), DbType.String);
+                continue;
             }
-            else
+
+            if (dbValue is IEnumerable enumerable && dbValue is not string)
             {
-                parameters.Add(property.Name, dbValue);
+                parameters.Add(property.Name, JsonSerializer.Serialize(dbValue));
+                continue;
             }
+
+            parameters.Add(property.Name, dbValue);
         }
 
         return (setList, parameters);
@@ -1051,9 +1172,17 @@ public class CRUD
 
         foreach (var property in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (property.PropertyType.IsEnum && property.GetValue(data) is { } value)
+            var propertyValue = property.GetValue(data);
+
+            if (property.PropertyType.IsEnum && propertyValue is { } enumValue)
             {
-                parameters.Add(property.Name, value.ToString(), DbType.String);
+                parameters.Add(property.Name, enumValue.ToString(), DbType.String);
+                continue;
+            }
+
+            if (propertyValue is not null && property.PropertyType != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(property.PropertyType))
+            {
+                parameters.Add(property.Name, JsonSerializer.Serialize(propertyValue));
             }
         }
 
@@ -1104,7 +1233,7 @@ public class CRUD
             };
         }
 
-        return JsonSerializer.Deserialize(jsonElement.GetRawText(), effectiveType);
+        return JsonSerializer.Deserialize(jsonElement.GetRawText(), effectiveType, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 }
 
@@ -1209,14 +1338,12 @@ internal static class CrudInfoGeneration
        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
        .Where(p => !SystemFields.Contains(p.Name))
        .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
-       .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
        .ToFrozenDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
 
     internal static IReadOnlyList<string> GetInsertFields<T>() => typeof(T)
        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
        .Where(p => !SystemFields.Contains(p.Name))
        .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
-       .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
        .Select(p => Formatting.PascalToSnakeCase(p.Name))
        .ToList().AsReadOnly();
 
@@ -1224,7 +1351,6 @@ internal static class CrudInfoGeneration
        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
        .Where(p => !SystemFields.Contains(p.Name))
        .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
-       .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
        .Select(p => $"@{p.Name}")
        .ToList().AsReadOnly();
 
@@ -1232,7 +1358,6 @@ internal static class CrudInfoGeneration
        .GetProperties(BindingFlags.Public | BindingFlags.Instance)
        .Where(p => !SystemFields.Contains(p.Name))
        .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
-       .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
        .Select(p => $"{Formatting.PascalToSnakeCase(p.Name)} = @{p.Name}")
        .ToList().AsReadOnly();
 

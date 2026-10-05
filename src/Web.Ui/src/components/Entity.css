@@ -1,0 +1,68 @@
+.entity-display {
+  &.row {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25rem;
+
+    & > .value.list-value {
+      margin-top: 0.25rem;
+      display: flex;
+      flex-direction: column;
+
+      & > .row {
+        display: flex;
+        flex-direction: row;
+        gap: 0.25rem;
+      }
+    }
+  }
+
+  & > .entity-reference {
+    flex-grow: 1;
+    margin-top: 0.5rem;
+  }
+
+  &.expander.expanded {
+    gap: 0;
+
+    & > .header {
+      padding-bottom: 0.25rem;
+    }
+  }
+}
+
+.entity-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+
+  & > label {
+    font-weight: bold;
+  }
+
+  /* & > input:is([type="text"], [type="number"], [type="date"]) { */
+  & > input {
+    padding: 0.25rem;
+    border: var(--control-border);
+    border-radius: var(--control-radius);
+    padding: 0.15rem 0.75rem;
+    background: var(--panel);
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  & > select {
+    appearance: none;
+    border: var(--control-border);
+    border-radius: var(--control-radius);
+    padding: 8px 10px;
+    color: var(--color-text);
+    font: inherit;
+  }
+}

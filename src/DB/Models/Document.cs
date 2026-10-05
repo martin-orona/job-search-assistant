@@ -28,11 +28,11 @@ public enum DocumentType
     /// <summary>HTML document type.</summary>
     HTML,
 
-    /// <summary>PDF document type.</summary>
-    PDF,
-
     /// <summary>Markdown document type.</summary>
     Markdown,
+
+    /// <summary>PDF document type.</summary>
+    PDF,
 
     /// <summary>Plain text document type.</summary>
     Text,

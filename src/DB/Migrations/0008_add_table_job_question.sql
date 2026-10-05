@@ -11,9 +11,7 @@ create table if not exists job_question (
     created_at datetime not null default CURRENT_TIMESTAMP,
     updated_at datetime not null default CURRENT_TIMESTAMP,
     question text not null,
-    answer text,
-    job_application_id integer not null,
-    foreign key (job_application_id) references job_application(id)
+    answer text
 );
 
 create trigger job_question_au_set_updated_at

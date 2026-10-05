@@ -8,6 +8,4 @@ public class JobQuestion : Model
     public string Question { get; set; } = string.Empty;
 
     public string? Answer { get; set; }
-
-    public int JobApplicationId { get; set; }
 }

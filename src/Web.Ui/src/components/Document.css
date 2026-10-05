@@ -1,0 +1,12 @@
+.entity-display.row.document {
+  display: flex;
+  flex-direction: column;
+
+  & > .document-type {
+    padding-bottom: 0.25rem;
+    border-bottom: var(--control-border);
+  }
+  & > .document-content {
+    white-space: pre-wrap;
+  }
+}

@@ -110,12 +110,7 @@ function App() {
 
         <div id={`${activeTabData.id}-panel`} role="tabpanel" aria-labelledby={`${activeTabData.id}-tab`} className="tab-panel">
           {activeTab === "job-listings" ? (
-            <JobPostingsTab
-              onAnalyze={(jobPosting) => {
-                setSelectedJobPosting(jobPosting);
-                setActiveTab("resume-analyzer");
-              }}
-            />
+            <JobPostingsTab />
           ) : activeTab === "job-applications" ? (
             <JobApplicationsTab />
           ) : activeTab === "resume-analyzer" ? (

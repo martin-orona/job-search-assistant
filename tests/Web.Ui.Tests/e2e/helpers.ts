@@ -1,6 +1,7 @@
-import { expect, test, TestInfo } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { createHash } from "node:crypto";
 
-function getTabTarget(page: Parameters<typeof test>[0]["page"], tabTarget: string) {
+function getTabTarget(page: Page, tabTarget: string) {
   if (tabTarget.startsWith("#") || tabTarget.startsWith(".")) {
     return page.locator(tabTarget);
   }
@@ -69,7 +70,7 @@ export function generateExpanderStateTests(expanderSelectors: string[], tabTarge
     });
   }
 
-  async function verifyExpanderStateRestores(page: Parameters<typeof test>[0]["page"], selector: string) {
+  async function verifyExpanderStateRestores(page: Page, selector: string) {
     const expander = page.locator(selector);
     const parentDetails = page.locator(`xpath=//*[@id='${selector.replace("#", "")}']/ancestor::details[1]`);
     const isVisible = await expander.isVisible().catch(() => false);
@@ -85,26 +86,18 @@ export function generateExpanderStateTests(expanderSelectors: string[], tabTarge
       }
     }
 
-    const summary = expander.locator("> summary");
-
     await expect(expander, `Control ${selector} should be visible before toggling.`).toBeVisible();
 
-    const initialStateIsOpen = await expander.evaluate((element) => element.hasAttribute("open"));
+    const usesDetails = await expander.evaluate((element) => element.tagName === "DETAILS");
+    const summary = expander.locator(usesDetails ? "> summary" : "> .header");
+    const initialStateIsOpen = await expander.evaluate((element) =>
+      element.tagName === "DETAILS" ? element.hasAttribute("open") : element.classList.contains("expanded"),
+    );
     const targetStateIsOpen = !initialStateIsOpen;
 
     await summary.click();
 
-    if (targetStateIsOpen) {
-      await expect(
-        expander,
-        `Control ${selector} should toggle from ${initialStateIsOpen ? "open" : "closed"} to open after the user clicks it.`,
-      ).toHaveAttribute("open");
-    } else {
-      await expect(
-        expander,
-        `Control ${selector} should toggle from ${initialStateIsOpen ? "open" : "closed"} to closed after the user clicks it.`,
-      ).not.toHaveAttribute("open");
-    }
+    await expectExpandedState("after the user clicks it");
 
     const { storageKey, stateProperty } = getExpanderStorageTarget(selector);
     await expect
@@ -136,16 +129,17 @@ export function generateExpanderStateTests(expanderSelectors: string[], tabTarge
 
     await page.reload();
 
-    if (targetStateIsOpen) {
-      await expect(
-        expander,
-        `Control ${selector} should restore its persisted open state after reload. Expected open but it remained closed.`,
-      ).toHaveAttribute("open");
-    } else {
-      await expect(
-        expander,
-        `Control ${selector} should restore its persisted closed state after reload. Expected closed but it remained open.`,
-      ).not.toHaveAttribute("open");
+    await expectExpandedState("after reload");
+
+    async function expectExpandedState(stage: string) {
+      const assertion = expect(expander, `Control ${selector} should be ${targetStateIsOpen ? "open" : "closed"} ${stage}.`);
+      if (!usesDetails) {
+        await assertion.toHaveClass(new RegExp(`\\b${targetStateIsOpen ? "expanded" : "collapsed"}\\b`));
+      } else if (targetStateIsOpen) {
+        await assertion.toHaveAttribute("open");
+      } else {
+        await assertion.not.toHaveAttribute("open");
+      }
     }
   }
 }
@@ -167,7 +161,7 @@ export function generateInputStateTests(inputSelectors: string[], tabTarget: str
     });
   }
 
-  async function verifyInputValueRestores(page: Parameters<typeof test>[0]["page"], selector: string) {
+  async function verifyInputValueRestores(page: Page, selector: string) {
     const input = page.locator(selector);
     const ancestorDetails = page.locator(`xpath=//*[@id='${selector.replace("#", "")}']/ancestor::details`);
     const isVisible = await input.isVisible().catch(() => false);
@@ -268,7 +262,7 @@ export function generateInputStateTests(inputSelectors: string[], tabTarget: str
   }
 }
 
-export async function resetPersistedUiState(page: Parameters<typeof test>[0]["page"]) {
+export async function resetPersistedUiState(page: Page) {
   try {
     await page.unrouteAll();
   } catch {
@@ -314,7 +308,7 @@ export async function resetPersistedUiState(page: Parameters<typeof test>[0]["pa
   });
 }
 
-export async function initiateDbViewerTestFlow(page: any, testInfo: TestInfo) {
+export async function initiateDbViewerTestFlow(page: Page, testInfo: TestInfo) {
   const headers = getTestHeaders(testInfo);
   await page.setExtraHTTPHeaders(headers);
   // await page.context().addCookies([
@@ -326,13 +320,14 @@ export async function initiateDbViewerTestFlow(page: any, testInfo: TestInfo) {
   // ]);
 }
 
-export async function cleanupDbViewerTestFlow(page: any, testInfo: TestInfo) {
-  await page.request.get("http://localhost:5000/clean-test-db", {
+export async function cleanupDbViewerTestFlow(page: Page, testInfo: TestInfo) {
+  const response = await page.request.get("http://localhost:5000/api/v1/admin/clean-test-db", {
     headers: {
       "X-JSA-Test-Cleanup": "true",
       ...getTestHeaders(testInfo),
     },
   });
+  expect(response.ok(), "The current test flow must be cleaned up successfully.").toBeTruthy();
 }
 
 export function getTestHeaders(testInfo: TestInfo) {
@@ -360,10 +355,9 @@ export function getTestHeaders(testInfo: TestInfo) {
     string
   >());
   if (!globalCache.has(cacheKey)) {
-    const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const flowId = `${projectName}-${fileToken}-${testTitle}-${uniqueSuffix}`;
-    const cappedFlowId = flowId.length > 80 ? `${flowId.slice(0, 70)}-${Math.random().toString(36).slice(2, 8)}` : flowId;
-    globalCache.set(cacheKey, cappedFlowId);
+    const hash = createHash("sha256").update(cacheKey).digest("hex").slice(0, 16);
+    const flowId = `${projectName.slice(0, 12)}-${testTitle.slice(0, 45)}-${hash}`;
+    globalCache.set(cacheKey, flowId);
   }
 
   return {
@@ -378,7 +372,7 @@ export async function callServer({
   method,
   data,
 }: {
-  page: any;
+  page: Page;
   testInfo: TestInfo;
   route: string;
   method: "POST" | "PATCH";
@@ -388,7 +382,7 @@ export async function callServer({
   const response = await page.evaluate(sendToServer, { route, method, data, testHeaders });
 
   if (!response.ok) {
-    throw new Error(`Failed to call the web server: ${response.status} ${JSON.stringify(response.json?.())}`);
+    throw new Error(`Failed to call the web server: ${response.status} ${JSON.stringify(response.json)}`);
   }
 
   return response;

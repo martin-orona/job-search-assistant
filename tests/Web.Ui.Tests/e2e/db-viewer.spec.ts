@@ -69,6 +69,7 @@ namespace DbViewer {
           route: "ai-prompts",
           data: {
             name: "Prompt for Senior Engineer",
+            aiName: "Test AI",
             aiUrl: "https://chat.openai.com",
             jobPosting: {
               title: "Senior Engineer",
@@ -161,7 +162,6 @@ namespace DbViewer {
           data: {
             question: "What makes you a good fit?",
             answer: "I enjoy solving problems and shipping software.",
-            jobApplicationId: 0,
           },
         },
       },
@@ -180,6 +180,48 @@ namespace DbViewer {
         },
       },
     };
+
+    test("Scenario: Adding an existing question pair to an application persists its shared reference", async ({ page }, testInfo) => {
+      const question = await callServer({ page, testInfo, route: "job-questions", method: "POST", data: { question: "fdsa", answer: "asdf" } });
+      expect(question.status).toBe(201);
+      const config = {
+        ...build_common_entity({ build_id: (segments: string[]) => build_tab_id(["job-applications", ...segments]) }),
+        seeds: seedRecords["job-applications"],
+      };
+      const id = await seedTheDatabase({ page, testInfo, seeds: config.seeds });
+      await page.goto("/");
+      await page.getByRole("tab", { name: "DB Viewer" }).click();
+      await expandSection({ page, config });
+      await page.locator(config.editButtonId(id)).click();
+      const editor = page.locator(config.formId());
+      await editor.getByRole("button", { name: "Add questions", exact: true }).click();
+      await editor.getByLabel("Question", { exact: true }).fill("fdsa");
+      await editor.getByLabel("Answer", { exact: true }).fill("asdf");
+      const saved = page.waitForResponse((response) => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/api/v1/job-applications/${id}`);
+      await page.locator(config.saveButtonId(id)).click();
+      const response = await saved;
+      expect(response.ok(), await response.text()).toBeTruthy();
+      expect(response.request().postDataJSON()).toEqual({ questions: [{ question: "fdsa", answer: "asdf" }] });
+      await expect(editor).not.toBeVisible();
+      const refreshed = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/api/v1/job-applications");
+      await page.locator(config.controlId("refresh-button")).click();
+      expect((await refreshed).ok()).toBeTruthy();
+      await expandRecordDetails({ page, config, entityId: id });
+      await expect(page.locator(config.recordId(id)).locator(".value.questions")).toContainText("fdsa");
+      await expect(page.locator(config.recordId(id)).locator(".value.questions")).toContainText("asdf");
+      const stored = await page.request.get(`http://localhost:5000/api/v1/job-applications/${id}?deep=true`, { headers: getTestHeaders(testInfo) });
+      expect(stored.ok()).toBeTruthy();
+      expect((await stored.json()).questions).toEqual([expect.objectContaining({ id: question.json.id, question: "fdsa", answer: "asdf" })]);
+      const questionConfig = {
+        ...build_common_entity({ build_id: (segments: string[]) => build_tab_id(["job-questions", ...segments]) }),
+        seeds: seedRecords["job-questions"],
+      };
+      await expandSection({ page, config: questionConfig });
+      await expandRecordDetails({ page, config: questionConfig, entityId: question.json.id });
+      const questionRow = page.locator(questionConfig.recordId(question.json.id));
+      await expect(questionRow).toContainText("Referenced By");
+      await expect(questionRow.locator(`a[href='${config.recordId(id)}']`)).toContainText(`Job Application ${id}`);
+    });
 
     test("Scenario: Navigate to the DB Viewer screen", async ({ page }) => {
       // Given the user is using the JSA
@@ -202,106 +244,55 @@ namespace DbViewer {
       await expect(heading).toBeVisible();
     });
 
-    test("Scenario: Daily backups list is visible in the DB Viewer tab", async ({ page }) => {
-      await page.route("**/api/v1/admin/db-backups", async (route) => {
-        if (route.request().method() === "GET") {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify(["JobSearchAssistant.db.2026-09-14T08-00-00Z", "JobSearchAssistant.db.2026-09-13T08-00-00Z"]),
-          });
-        }
+    test("Scenario: Daily backups list is visible in the DB Viewer tab", async ({ page }, testInfo) => {
+      const created = await page.request.get("http://localhost:5000/api/v1/admin/db-snapshot", {
+        headers: getTestHeaders(testInfo),
       });
+      expect(created.ok()).toBeTruthy();
+      const snapshot = await created.json();
+      expect(snapshot.path).toContain("jsa_test_");
+      const snapshotName = snapshot.path.split(/[\\/]/).at(-1);
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
 
-      const backupSection = page.locator("#db-viewer--db-backups--container");
+      const backupSection = page.locator("#db-viewer--db-backups");
       await expect(backupSection).toBeVisible();
-      await expect(page.locator("#db-viewer--db-backups--count")).toContainText("2 saved");
-      await expect(page.locator("#db-viewer--db-backups--list")).toContainText("JobSearchAssistant.db.2026-09-14T08-00-00Z");
-      await expect(page.locator("#db-viewer--db-backups--list")).toContainText("JobSearchAssistant.db.2026-09-13T08-00-00Z");
+      await expect(backupSection.locator("> .header .count")).toHaveText("1 record(s)");
+      await backupSection.locator("> .header > .title").click();
+      await expect(backupSection.locator("ul.data-list")).toContainText(snapshotName);
     });
 
     test("Scenario: Create Snapshot button creates a new daily snapshot", async ({ page }) => {
-      let snapshotCallCount = 0;
-
-      await page.route("**/api/v1/admin/db-snapshot", async (route) => {
-        snapshotCallCount += 1;
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ path: "JobSearchAssistant.db.2026-09-14T10-20-30Z" }),
-        });
-      });
-
-      await page.route("**/api/v1/admin/db-backups", async (route) => {
-        if (route.request().method() === "GET") {
-          const payload =
-            snapshotCallCount > 0
-              ? ["JobSearchAssistant.db.2026-09-14T10-20-30Z", "JobSearchAssistant.db.2026-09-13T08-00-00Z"]
-              : ["JobSearchAssistant.db.2026-09-13T08-00-00Z"];
-
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify(payload),
-          });
-        }
-      });
-
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
-
+      const backupSection = page.locator("#db-viewer--db-backups");
+      await expect(backupSection.locator("> .header .count")).toHaveText("0 record(s)");
+      const created = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/admin/db-snapshot");
       await page.locator("#db-viewer--db-backups--create-snapshot-button").click();
-
-      await expect(page.locator("#db-viewer--db-backups--list")).toContainText("JobSearchAssistant.db.2026-09-14T10-20-30Z");
-      await expect(page.locator("#db-viewer--db-backups--count")).toContainText("2 saved");
-      expect(snapshotCallCount).toBeGreaterThan(0);
+      const response = await created;
+      expect(response.ok()).toBeTruthy();
+      const snapshot = await response.json();
+      expect(snapshot.path).toContain("jsa_test_");
+      await expect(backupSection.locator("> .header .count")).toHaveText("1 record(s)");
+      await backupSection.locator("> .header > .title").click();
+      await expect(backupSection.locator("ul.data-list")).toContainText(snapshot.path.split(/[\\/]/).at(-1));
     });
 
-    test("Scenario: Export button opens record selection and downloads JSON", async ({ page }) => {
-      await page.route("**/api/v1/job-postings**", async (route) => {
-        if (route.request().method() === "GET") {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify([
-              {
-                id: 1,
-                title: "Senior Engineer",
-                company: "Contoso",
-                location: "Remote",
-                salary: "$150,000",
-                workModel: "Remote",
-                url: "https://example.com/job/1",
-                document: {
-                  id: 10,
-                  title: "Senior Engineer",
-                  type: "markdown",
-                  content: "# Senior Engineer",
-                  source: "https://example.com/job/1",
-                },
-              },
-              {
-                id: 2,
-                title: "Platform Engineer",
-                company: "Fabrikam",
-                location: "Austin, TX",
-                salary: "$175,000",
-                workModel: "Hybrid",
-                url: "https://example.com/job/2",
-                document: {
-                  id: 11,
-                  title: "Platform Engineer",
-                  type: "markdown",
-                  content: "# Platform Engineer",
-                  source: "https://example.com/job/2",
-                },
-              },
-            ]),
-          });
-        }
+    test("Scenario: Export button opens record selection and downloads JSON", async ({ page }, testInfo) => {
+      const first = await callServer({
+        page,
+        testInfo,
+        route: "job-postings",
+        method: "POST",
+        data: seedRecords["job-postings"].primary.data,
+      });
+      const second = await callServer({
+        page,
+        testInfo,
+        route: "job-postings",
+        method: "POST",
+        data: seedRecords["ai-prompts"].alternateJobPosting.data,
       });
 
       await page.goto("/");
@@ -310,53 +301,100 @@ namespace DbViewer {
       await page.locator("#db-viewer--job-postings--export-button").click();
 
       await expect(page.locator("#db-viewer--job-postings--export-dialog")).toBeVisible();
-      await expect(page.locator("#db-viewer--job-postings--export-record-1-checkbox")).toBeVisible();
-      await expect(page.locator("#db-viewer--job-postings--export-record-2-checkbox")).toBeVisible();
+      const firstCheckbox = page.locator(`#db-viewer--job-postings--export-record-${first.json.id}-checkbox`);
+      await expect(firstCheckbox).toBeVisible();
+      await expect(page.locator(`#db-viewer--job-postings--export-record-${second.json.id}-checkbox`)).toBeVisible();
+      await firstCheckbox.check();
 
       const downloadPromise = page.waitForEvent("download");
       await page.locator("#db-viewer--job-postings--export-confirm-button").click();
       const download = await downloadPromise;
 
       await expect(download.suggestedFilename()).toMatch(/\.json$/i);
+      const stream = await download.createReadStream();
+      expect(stream).not.toBeNull();
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+      const exported = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      expect(exported.entity).toBe("Job Posting");
+      expect(exported.records).toHaveLength(1);
+      expect(exported.records[0]).toMatchObject({
+        id: first.json.id,
+        title: "Senior Engineer",
+        document: { content: "# Senior Engineer" },
+      });
     });
 
-    test("Scenario: Canceling export closes the selection list", async ({ page }) => {
-      await page.route("**/api/v1/job-postings**", async (route) => {
-        if (route.request().method() === "GET") {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify([
-              {
-                id: 1,
-                title: "Senior Engineer",
-                company: "Contoso",
-                location: "Remote",
-                salary: "$150,000",
-                workModel: "Remote",
-                url: "https://example.com/job/1",
-                document: {
-                  id: 10,
-                  title: "Senior Engineer",
-                  type: "markdown",
-                  content: "# Senior Engineer",
-                  source: "https://example.com/job/1",
-                },
-              },
-            ]),
-          });
-        }
+    test("Scenario: Canceling export closes the selection list", async ({ page }, testInfo) => {
+      const created = await callServer({
+        page,
+        testInfo,
+        route: "job-postings",
+        method: "POST",
+        data: seedRecords["job-postings"].primary.data,
       });
+      expect(created.status).toBe(201);
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
 
       await page.locator("#db-viewer--job-postings--export-button").click();
       await expect(page.locator("#db-viewer--job-postings--export-dialog")).toBeVisible();
+      await expect(page.locator(`#db-viewer--job-postings--export-record-${created.json.id}-checkbox`)).toBeVisible();
 
       await page.locator("#db-viewer--job-postings--export-cancel-button").click();
 
       await expect(page.locator("#db-viewer--job-postings--export-dialog")).toBeHidden();
+      const stored = await page.request.get(`http://localhost:5000/api/v1/job-postings/${created.json.id}`, {
+        headers: getTestHeaders(testInfo),
+      });
+      expect(stored.ok()).toBeTruthy();
+      expect(await stored.json()).toMatchObject({ id: created.json.id, title: "Senior Engineer" });
+    });
+
+    test.describe("Scenario Outline: Entity deletion can be confirmed or cancelled", () => {
+      for (const entity of [
+        { name: "Job Posting", route: "job-postings" },
+        { name: "Resume", route: "resumes" },
+        { name: "AI Prompt Template", route: "ai-prompt-templates" },
+      ]) {
+        for (const cancel of [false, true]) {
+          test(`Entity: ${entity.name} ${cancel ? "Cancel" : "Delete"}`, async ({ page }, testInfo) => {
+            const config = {
+              ...build_common_entity({ build_id: (segments: string[]) => build_tab_id([entity.route, ...segments]) }),
+              seeds: seedRecords[entity.route],
+            };
+            const id = await seedTheDatabase({ page, testInfo, seeds: config.seeds });
+            await page.goto("/");
+            await page.getByRole("tab", { name: "DB Viewer" }).click();
+            await expandSection({ page, config });
+            const row = page.locator(config.recordId(id));
+            await row.getByRole("button", { name: "Delete", exact: true }).first().click();
+            const dialog = page.locator(`#db-viewer--${entity.route}--delete-dialog`);
+            await expect(dialog).toBeVisible();
+            if (cancel) {
+              await page.locator(`#db-viewer--${entity.route}--delete-cancel-button`).click();
+              await expect(row).toBeVisible();
+            } else {
+              const deleted = page.waitForResponse((response) =>
+                response.request().method() === "DELETE" && new URL(response.url()).pathname === `/api/v1/${entity.route}/${id}`);
+              await page.locator(`#db-viewer--${entity.route}--delete-confirm-button`).click();
+              const response = await deleted;
+              expect(response.ok(), await response.text()).toBeTruthy();
+              await expect(row).toHaveCount(0);
+            }
+            await expect(dialog).toBeHidden();
+            const stored = await page.request.get(`http://localhost:5000/api/v1/${entity.route}/${id}`, {
+              headers: getTestHeaders(testInfo),
+            });
+            expect(stored.status()).toBe(cancel ? 200 : 404);
+            const document = await page.request.get(`http://localhost:5000/api/v1/documents/${config.seeds.primary.created!.documentId}`, {
+              headers: getTestHeaders(testInfo),
+            });
+            expect(document.status()).toBe(cancel ? 200 : 404);
+          });
+        }
+      }
     });
 
     test("Scenario: Import assigns new IDs automatically and highlights the imported records", async ({ page }, testInfo) => {
@@ -422,7 +460,10 @@ namespace DbViewer {
 
       await page.locator("#db-viewer--job-postings--import-confirm-button").click();
 
-      const importedRow = page.locator("[id^='db-viewer--job-postings--record-']").filter({ hasText: "Imported Engineer" }).first();
+      const importedRow = page
+        .locator("#db-viewer--job-postings--container ul.data-list > li")
+        .filter({ hasText: "Imported Engineer" })
+        .first();
 
       await expect(importedRow).toBeVisible({ timeout: 10000 });
 
@@ -436,8 +477,9 @@ namespace DbViewer {
       const importedId = Number(importedRecord.id);
       expect(importedId).not.toBe(existingId);
 
-      const importedRowById = page.locator(`#db-viewer--job-postings--record-${importedId}`);
+      const importedRowById = page.locator(`#db-viewer--job-postings--container--record-${importedId}`);
       await expect(importedRowById).toBeVisible({ timeout: 5000 });
+      await expectTransientHighlight(importedRowById);
     });
 
     test("Scenario: Import confirmation persists the selected file data to the real server", async ({ page }, testInfo) => {
@@ -526,7 +568,7 @@ namespace DbViewer {
       expect(importedRecord, "The real server should save the imported record.").toBeTruthy();
 
       const importedId = Number(importedRecord.id);
-      const importedRecordRow = page.locator(`#db-viewer--job-postings--record-${importedId}`);
+      const importedRecordRow = page.locator(`#db-viewer--job-postings--container--record-${importedId}`);
       await expect(importedRecordRow).toBeVisible({ timeout: 5000 });
       await expectTransientHighlight(importedRecordRow);
     });
@@ -593,6 +635,7 @@ namespace DbViewer {
         method: "POST",
         data: {
           name: "Prompt that references the posting",
+          aiName: "Test AI",
           aiUrl: "https://chat.openai.com",
           jobPostingId: jobPostingId,
           resumeId: resumeId,
@@ -606,9 +649,11 @@ namespace DbViewer {
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
-      await page.locator("#db-viewer--ai-prompts--container--summary").click();
+      await page.locator("#db-viewer--ai-prompts--container > .header > .title").click();
 
-      const deleteButton = page.locator(`#db-viewer--ai-prompts--delete-button--record-${aiPromptId}`);
+      const deleteButton = page
+        .locator(`#db-viewer--ai-prompts--container--record-${aiPromptId}`)
+        .getByRole("button", { name: "Delete", exact: true });
       await expect(deleteButton).toBeVisible({ timeout: 10000 });
       await deleteButton.click();
 
@@ -687,9 +732,11 @@ namespace DbViewer {
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
-      await page.locator("#db-viewer--job-postings--container--summary").click();
+      await page.locator("#db-viewer--job-postings--container > .header > .title").click();
 
-      const deleteButton = page.locator(`#db-viewer--job-postings--delete-button--record-${recordId}`);
+      const deleteButton = page
+        .locator(`#db-viewer--job-postings--container--record-${recordId}`)
+        .getByRole("button", { name: "Delete", exact: true });
       await expect(deleteButton).toBeVisible({ timeout: 10000 });
       await deleteButton.click();
 
@@ -740,9 +787,11 @@ namespace DbViewer {
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
-      await page.locator("#db-viewer--job-postings--container--summary").click();
+      await page.locator("#db-viewer--job-postings--container > .header > .title").click();
 
-      const deleteButton = page.locator(`#db-viewer--job-postings--delete-button--record-${recordId}`);
+      const deleteButton = page
+        .locator(`#db-viewer--job-postings--container--record-${recordId}`)
+        .getByRole("button", { name: "Delete", exact: true });
       await expect(deleteButton).toBeVisible({ timeout: 10000 });
       await deleteButton.click();
 
@@ -832,6 +881,7 @@ namespace DbViewer {
         data: {
           name: "Prompt references the target",
           aiUrl: "https://chat.openai.com",
+          aiName: "Test AI",
           jobPostingId: jobPostingId,
           resumeId: resumeId,
           aiPromptTemplateId: templateId,
@@ -844,9 +894,11 @@ namespace DbViewer {
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
-      await page.locator("#db-viewer--job-postings--container--summary").click();
+      await page.locator("#db-viewer--job-postings--container > .header > .title").click();
 
-      const deleteButton = page.locator(`#db-viewer--job-postings--delete-button--record-${jobPostingId}`);
+      const deleteButton = page
+        .locator(`#db-viewer--job-postings--container--record-${jobPostingId}`)
+        .getByRole("button", { name: "Delete", exact: true });
       await expect(deleteButton).toBeVisible({ timeout: 10000 });
       await deleteButton.click();
 
@@ -856,7 +908,7 @@ namespace DbViewer {
       await page.locator("#db-viewer--job-postings--delete-confirm-button").click();
 
       await expect(failureDialog).toBeVisible({ timeout: 10000 });
-      const promptReferenceLink = failureDialog.locator(`a[href='#db-viewer--ai-prompts--record-${promptId}']`);
+      const promptReferenceLink = failureDialog.locator(`a[href='#db-viewer--ai-prompts--container--record-${promptId}']`);
       await expect(failureDialog).toContainText(`AI Prompt ${promptId}`, { timeout: 10000 });
       await expect(failureDialog).toContainText("Delete the AI Prompt records first", { timeout: 10000 });
       await expect(promptReferenceLink).toContainText(`AI Prompt ${promptId}`);
@@ -941,6 +993,7 @@ namespace DbViewer {
         data: {
           name: "Prompt references the target for keyboard dismissal",
           aiUrl: "https://chat.openai.com",
+          aiName: "Test AI",
           jobPostingId: jobPostingId,
           resumeId: resumeId,
           aiPromptTemplateId: templateId,
@@ -953,9 +1006,11 @@ namespace DbViewer {
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
-      await page.locator("#db-viewer--job-postings--container--summary").click();
+      await page.locator("#db-viewer--job-postings--container > .header > .title").click();
 
-      const deleteButton = page.locator(`#db-viewer--job-postings--delete-button--record-${jobPostingId}`);
+      const deleteButton = page
+        .locator(`#db-viewer--job-postings--container--record-${jobPostingId}`)
+        .getByRole("button", { name: "Delete", exact: true });
       const deleteDialog = page.locator("#db-viewer--job-postings--delete-dialog");
       const failureDialog = page.locator("#db-viewer--job-postings--delete-failure-dialog");
       const dismissalKeys = ["Escape", "Enter", " ", "d", "D"];
@@ -1001,6 +1056,7 @@ namespace DbViewer {
             records: [
               {
                 name: "asdf vs Senior Software Engineer",
+                aiName: "Copilot",
                 aiUrl: "https://copilot.microsoft.com/",
                 jobPosting: {
                   title: "Senior Software Engineer",
@@ -1068,7 +1124,7 @@ namespace DbViewer {
       });
 
       const importedAiPromptName = "asdf vs Senior Software Engineer";
-      const importedRecordRow = page.locator("#db-viewer--ai-prompts--list li").filter({ hasText: importedAiPromptName }).first();
+      const importedRecordRow = page.locator("#db-viewer--ai-prompts--container ul.data-list > li").filter({ hasText: importedAiPromptName }).first();
 
       await page.locator("#db-viewer--ai-prompts--import-confirm-button").click();
 
@@ -1095,6 +1151,7 @@ namespace DbViewer {
       const importedRecords = await importedResponse.json();
       const importedRecord = importedRecords.find((record: any) => record.name === importedAiPromptName);
       expect(importedRecord, "The imported AI Prompt should be persisted to the real server.").toBeTruthy();
+      expect(importedRecord.aiName).toBe("Copilot");
       expect(Number(importedRecord.id)).toBeGreaterThan(0);
 
       await expect(importedRecordRow).toBeVisible({ timeout: 5000 });
@@ -1121,7 +1178,9 @@ namespace DbViewer {
 
       await page.goto("/");
       await page.getByRole("tab", { name: "DB Viewer" }).click();
-      await page.locator("#db-viewer--job-postings--container--summary").click();
+      const section = page.locator("#db-viewer--job-postings--container");
+      await section.locator("> .header > .title").click();
+      await expect(section.locator(".empty-list:not(.loading)")).toBeVisible();
 
       shouldFailJobPostingRefresh = true;
       const refreshResponse = page.waitForResponse(
@@ -1132,16 +1191,17 @@ namespace DbViewer {
           response.status() === 500,
       );
 
-      await page.locator("#db-viewer--job-postings--refresh-button").click();
+      await section.getByRole("button", { name: "Refresh records", exact: true }).click();
       await refreshResponse;
 
       await expect(page.locator("#db-viewer--job-postings--refresh-status")).toContainText(
-        "Unable to refresh job postings. (500: Job posting refresh failed)",
+        "Unable to refresh Job Posting. (500: Job posting refresh failed)",
       );
     });
 
     test.describe("Scenario Outline: Entities visible in the DB Viewer", () => {
       type LocalEntityConfig = EntityConfig & {
+        name: string;
         checkField: string;
         checkFieldObjectKey: string;
       };
@@ -1264,12 +1324,12 @@ namespace DbViewer {
         await expect(expander).toBeVisible();
         await expect(expander).toContainText(config.name);
 
-        await expect(page.locator(config.controlId("count"))).toContainText("saved");
-        await expect(page.locator(config.controlId("refresh-button"))).toBeVisible();
+        await expect(expander.locator("> .header .count")).toHaveText("1 record(s)");
+        await expect(expander.getByRole("button", { name: "Refresh records", exact: true })).toBeVisible();
 
-        await expect(page.locator(config.controlId("list"))).toBeVisible();
+        await expect(expander.locator("ul.data-list")).toBeVisible();
 
-        const rowSummary = page.locator(config.recordId(entityId)).locator("summary").first();
+        const rowSummary = expander.locator("ul.data-list > li .expander > .header > .title").first();
         await expect(rowSummary).toContainText(String(entityId));
         await expect(rowSummary).toContainText(config.seeds.primary.data[config.checkFieldObjectKey]);
       }
@@ -1305,6 +1365,8 @@ namespace DbViewer {
             { field: "salary", value: "$210,000" },
             { field: "work-model", value: "Hybrid" },
             { field: "url", value: "https://example.com/job/principal" },
+            { field: "document--type", value: "Markdown" },
+            { field: "document--content", value: "# Principal Engineer" },
           ],
           expectedText: "Principal Engineer",
         };
@@ -1329,7 +1391,7 @@ namespace DbViewer {
       });
 
       test("Entity: Job Application", async ({ page }: { page: Page }, testInfo: TestInfo) => {
-        const config = {
+        const config: LocalEntityConfig = {
           name: "Job Application",
           route: "job-applications",
           createButtonId: "#db-viewer--job-applications--create-button",
@@ -1385,17 +1447,27 @@ namespace DbViewer {
       });
 
       async function runTest_createWorkflow({ page, testInfo, config }: { page: Page; testInfo: TestInfo; config: LocalEntityConfig }) {
+        const initialLoad = page.waitForResponse(
+          (response) => response.request().method() === "GET" && new URL(response.url()).pathname === `/api/v1/${config.route}`,
+        );
         await page.goto("/");
         await page.getByRole("tab", { name: "DB Viewer" }).click();
+        expect((await initialLoad).ok()).toBeTruthy();
 
         const setupValues = config.setup ? await config.setup({ page, testInfo }) : {};
 
-        await page.locator(config.createButtonId).click();
-        await expect(page.locator(config.formId)).toBeVisible();
+        const section = page.locator(`#db-viewer--${config.route}--container`);
+        await section.locator("> .header > .title").click();
+        await expect(section.locator(".empty-list:not(.loading)")).toBeVisible();
+        await section.getByRole("button", { name: "Create", exact: true }).click();
+        const editor = section.locator("li[id$='--record-0'] [id^='entity-editor-']");
+        await expect(editor).toBeVisible();
 
         for (const fieldConfig of config.fields) {
           const value = fieldConfig.value;
-          const control = page.locator(`${config.formId} [id$="${fieldConfig.field}"]`);
+          const control = fieldConfig.field.startsWith("document--")
+            ? editor.locator(".document--editor.embedded").getByLabel(fieldLabel(fieldConfig.field.slice("document--".length)), { exact: true })
+            : editor.getByLabel(fieldLabel(fieldConfig.field), { exact: true });
           const tagName = await control.evaluate((element) => element.tagName.toLowerCase());
 
           if (tagName === "select") {
@@ -1406,14 +1478,12 @@ namespace DbViewer {
         }
 
         for (const [field, value] of Object.entries(setupValues)) {
-          const control = page.locator(`${config.formId} [id$="${field}"]`);
-          if (await control.count()) {
-            const tagName = await control.evaluate((element) => element.tagName.toLowerCase());
-            if (tagName === "select") {
-              await control.selectOption(value);
-            } else {
-              await control.fill(value);
-            }
+          const control = editor.getByLabel(fieldLabel(field), { exact: true });
+          const tagName = await control.evaluate((element) => element.tagName.toLowerCase());
+          if (tagName === "select") {
+            await control.selectOption(value);
+          } else {
+            await control.fill(value);
           }
         }
 
@@ -1422,16 +1492,17 @@ namespace DbViewer {
         });
 
         const createResponse = page.waitForResponse((response) => {
-          return response.request().method() === "POST" && response.url().endsWith(`/api/v1/${config.route}`) && response.ok();
+          return response.request().method() === "POST" && response.url().endsWith(`/api/v1/${config.route}`);
         });
 
-        await page.locator(config.saveButtonId).click();
+        await editor.locator("> .header").getByRole("button", { name: "Save", exact: true }).click();
 
         await createRequest;
-        await createResponse;
+        const response = await createResponse;
+        expect(response.status(), await response.text()).toBe(201);
 
-        await expect(page.locator(config.countId)).toContainText("saved");
-        await expect(page.locator(config.listId)).toContainText(config.expectedText);
+        await expect(section.locator("> .header .count")).toHaveText("1 record(s)");
+        await expect(section.locator("ul.data-list")).toContainText(config.expectedText);
       }
     });
 
@@ -1504,15 +1575,15 @@ namespace DbViewer {
         const row = page.locator(config.recordId(entityId));
         await expect(row).toBeVisible();
 
-        const expander = row.locator("details.db-viewer-record-expander").first();
+        const expander = row.locator(".expander").first();
         await expect(expander).toBeVisible();
-        await expect(expander).not.toHaveAttribute("open", "");
+        await expect(expander).toHaveClass(/\bcollapsed\b/);
 
-        const summary = expander.locator("summary").first();
+        const summary = expander.locator("> .header > .title");
         const summaryText = await summary.textContent();
         expect(summaryText).toContain(String(entityId));
 
-        const detailContent = expander.locator(".db-viewer-record-expander-content");
+        const detailContent = expander.locator("> .expanded");
         await expect(detailContent).not.toBeVisible();
 
         const expectedSummaryValue = (() => {
@@ -1525,7 +1596,7 @@ namespace DbViewer {
         await expect(detailContent).not.toBeVisible();
 
         await summary.click();
-        await expect(expander).toHaveAttribute("open", "");
+        await expect(expander).toHaveClass(/\bexpanded\b/);
         await expect(detailContent).toBeVisible();
         await expect(summary).toContainText(expectedSummaryValue);
       }
@@ -1559,7 +1630,7 @@ namespace DbViewer {
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
-          const summary = row.locator("summary").first();
+          const summary = row.locator(".expander > .header > .title").first();
           await expect(summary).toContainText(String(record.id));
           await expect(summary).toContainText(record.title ?? "");
           await expect(summary.locator("a")).toHaveCount(0);
@@ -1575,7 +1646,7 @@ namespace DbViewer {
           }),
 
           seeds: seedRecords["resumes"],
-          assert,
+          assert: getTestAction(assert),
         };
 
         await runTest_entitiesLinkToReferencedEntities({ page, testInfo, config });
@@ -1590,7 +1661,7 @@ namespace DbViewer {
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
-          const summary = row.locator("summary").first();
+          const summary = row.locator(".expander > .header > .title").first();
           await expect(summary).toContainText(String(record.id));
           await expect(summary).toContainText(record.name ?? "");
           await expect(row.locator("a.db-viewer-list-item-read-header-link")).toHaveCount(0);
@@ -1605,7 +1676,7 @@ namespace DbViewer {
           }),
 
           seeds: seedRecords["ai-prompt-templates"],
-          assert,
+          assert: getTestAction(assert),
         };
 
         await runTest_entitiesLinkToReferencedEntities({ page, testInfo, config });
@@ -1620,7 +1691,7 @@ namespace DbViewer {
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
-          const summary = row.locator("summary").first();
+          const summary = row.locator(".expander > .header > .title").first();
           await expect(summary).toContainText(String(record.id));
           await expect(summary).toContainText(record.name ?? "");
           await expect(row.locator("a.db-viewer-list-item-read-header-link")).toHaveCount(0);
@@ -1635,7 +1706,7 @@ namespace DbViewer {
           }),
 
           seeds: seedRecords["ai-prompts"],
-          assert,
+          assert: getTestAction(assert),
         };
 
         await runTest_entitiesLinkToReferencedEntities({ page, testInfo, config });
@@ -1650,7 +1721,7 @@ namespace DbViewer {
           const row = page.locator(config.recordId(record.id));
           await expect(row).toBeVisible();
 
-          const summary = row.locator("summary").first();
+          const summary = row.locator(".expander > .header > .title").first();
           await expect(summary).toContainText(String(record.id));
           await expect(summary).toContainText(record.name ?? "");
 
@@ -1658,10 +1729,19 @@ namespace DbViewer {
           const resumeId = Number(record.resumeId ?? record.resume?.id ?? record.id);
           const aiPromptTemplateId = Number(record.aiPromptTemplateId ?? record.aiPromptTemplate?.id ?? record.id);
 
-          await expect(row.locator("a.db-viewer-list-item-read-header-link")).toHaveCount(3);
-          await assertIsLinked(page, config.recordControlId(jobPostingId, "editor--job-posting--display--title"));
-          await assertIsLinked(page, config.recordControlId(resumeId, "editor--resume--display--name"));
-          await assertIsLinked(page, config.recordControlId(aiPromptTemplateId, "editor--ai-prompt-template--display--name"));
+          await expect(row.locator(".outgoing-reference a")).toHaveCount(3);
+          for (const target of [
+            { route: "job-postings", id: jobPostingId, name: record.jobPosting.title },
+            { route: "resumes", id: resumeId, name: record.resume.name },
+            { route: "ai-prompt-templates", id: aiPromptTemplateId, name: record.aiPromptTemplate.name },
+          ]) {
+            const targetId = `#db-viewer--${target.route}--container--record-${target.id}`;
+            const link = row.locator(`.outgoing-reference a[href='${targetId}']`);
+            await expect(link).toContainText(target.name);
+            await link.click();
+            await expect(page.locator(targetId)).toBeVisible();
+            await expect(page.locator(targetId).locator(".expander").first()).toHaveClass(/\bexpanded\b/);
+          }
         }
       });
 
@@ -1690,7 +1770,7 @@ namespace DbViewer {
         await expect(row).toBeVisible();
         await expandRecordDetails({ page, config, entityId });
 
-        await config.assert({ page, config });
+        await config.assert({ page, config, testInfo });
       }
     });
 
@@ -1759,18 +1839,18 @@ namespace DbViewer {
           const recordRow = page.locator(config.recordId(record.id));
           await expect(recordRow).toContainText("Referenced By");
 
-          const aiPromptLink = recordRow.locator(`a[href='#db-viewer--ai-prompts--record-${aiPrompt.id}']`);
+          const aiPromptLink = recordRow.locator(`a[href='#db-viewer--ai-prompts--container--record-${aiPrompt.id}']`);
           await expect(aiPromptLink).toContainText(`AI Prompt ${aiPrompt.id} · ${aiPrompt.name}`);
 
-          const jobApplicationLink = recordRow.locator(`a[href='#db-viewer--job-applications--record-${jobApplicationId}']`);
+          const jobApplicationLink = recordRow.locator(`a[href='#db-viewer--job-applications--container--record-${jobApplicationId}']`);
           await expect(jobApplicationLink).toContainText(`Job Application ${jobApplicationId} · Application Co`);
 
           await verifyBackReferenceWorks(page, recordRow, aiPrompt as { id: number; name: string });
 
           await expect(jobApplicationLink).toBeVisible();
           await clickDbViewerReferenceLink(jobApplicationLink);
-          await expect(page.locator(`#db-viewer--job-applications--record-${jobApplicationId}`)).toBeVisible();
-          await expect(page.locator(`#db-viewer--job-applications--container`)).toHaveAttribute("open", "");
+          await expect(page.locator(`#db-viewer--job-applications--container--record-${jobApplicationId}`)).toBeVisible();
+          await expect(page.locator(`#db-viewer--job-applications--container`)).toHaveClass(/\bexpanded\b/);
         }
       });
 
@@ -1857,7 +1937,8 @@ namespace DbViewer {
             throw new Error("Initial record ID not available.");
           }
 
-          // NOTE: Nothing to test since there is nothing that references AI Prompts, yet.
+          const row = page.locator(config.recordId(aiPrompt.id));
+          await expect(row.getByText("Referenced By", { exact: true })).toHaveCount(0);
 
           // const row = page.locator(config.recordId(record.id));
           // await expect(row).toBeVisible();
@@ -1868,6 +1949,39 @@ namespace DbViewer {
           // await verifyBackReferenceWorks(page, recordRow, aiPrompt as { id: number; name: string });
         }
       });
+
+      for (const entity of [
+        { name: "Job Source", route: "job-sources", seed: "job-applications", referencingName: "Job Application" },
+        { name: "Job Question", route: "job-questions", seed: "job-applications", referencingName: "Job Application" },
+      ]) {
+        test(`Entity: ${entity.name}`, async ({ page }, testInfo) => {
+          const seeds = structuredClone(seedRecords[entity.seed]);
+          if (entity.name === "Job Question") {
+            const question = await callServer({ page, testInfo, route: "job-questions", method: "POST", data: seedRecords["job-questions"].primary.data });
+            expect(question.status).toBe(201);
+            seeds.primary.data.questions = [question.json];
+          }
+          const config = {
+            name: entity.name,
+            ...build_common_entity({ build_id: (segments: string[]) => build_tab_id([entity.route, ...segments]) }),
+            seeds,
+            assert: getTestAction(async ({ page, config }) => {
+              const referencing = config.seeds.primary.created!;
+              const targetId = getSeedTargetRecordId(config, referencing);
+              const row = page.locator(config.recordId(targetId));
+              await expect(row).toContainText("Referenced By");
+              const target = `#db-viewer--${entity.seed}--container--record-${referencing.id}`;
+              const link = row.locator(`a[href='${target}']`);
+              await expect(link).toContainText(`${entity.referencingName} ${referencing.id}`);
+              await clickDbViewerReferenceLink(link);
+              await expect(page.locator(`#db-viewer--${entity.seed}--container`)).toHaveClass(/\bexpanded\b/);
+              await expect(page.locator(target).locator(".expander").first()).toHaveClass(/\bexpanded\b/);
+              await expectTransientHighlight(page.locator(target));
+            }),
+          };
+          await runTest_entitiesLinkBackToReferencingEntities({ page, testInfo, config });
+        });
+      }
 
       async function runTest_entitiesLinkBackToReferencingEntities({
         page,
@@ -1895,7 +2009,7 @@ namespace DbViewer {
         await expect(row).toBeVisible();
         await expandRecordDetails({ page, config, entityId: targetRecordId });
 
-        await config.assert({ page, config });
+        await config.assert({ page, config, testInfo });
 
         // const jobPostingRow = page.locator("#db-viewer--job-postings--record-9");
         // const referenceLink = jobPostingRow.locator("a[href='#db-viewer--ai-prompts--record-101']");
@@ -1907,7 +2021,7 @@ namespace DbViewer {
         // await expect(page.locator("#db-viewer--ai-prompts--record-101")).toBeVisible();
       }
 
-      function getSeedTargetRecordId(config: { name: string }, created: Record<string, any> | undefined): number {
+      function getSeedTargetRecordId(config: { name?: string }, created: Record<string, any> | undefined): number {
         if (!created) {
           throw new Error("Expected a seeded record for the incoming-reference test.");
         }
@@ -1922,6 +2036,10 @@ namespace DbViewer {
               return created.aiPromptTemplate;
             case "AI Prompt":
               return created;
+            case "Job Source":
+              return created.source;
+            case "Job Question":
+              return created.questions[0];
             default:
               return created;
           }
@@ -1935,24 +2053,24 @@ namespace DbViewer {
       }
 
       async function verifyBackReferenceWorks(page: Page, jobPostingRow: Locator, aiPrompt: { id: number; name: string }) {
-        const referenceId = `#db-viewer--ai-prompts--record-${aiPrompt.id}`;
+        const referenceId = `#db-viewer--ai-prompts--container--record-${aiPrompt.id}`;
         const referenceLink = jobPostingRow.locator(`a[href='${referenceId}']`);
         await expect(referenceLink).toContainText(`AI Prompt ${aiPrompt.id} · ${aiPrompt.name}`);
 
         await clickDbViewerReferenceLink(referenceLink);
 
-        await expect(page.locator("#db-viewer--ai-prompts--container")).toHaveAttribute("open", "");
+        await expect(page.locator("#db-viewer--ai-prompts--container")).toHaveClass(/\bexpanded\b/);
         await expect(page.locator(referenceId)).toBeVisible();
 
         const targetRow = page.locator(referenceId);
-        const targetExpander = targetRow.locator("details.db-viewer-record-expander").first();
-        await expect(targetExpander).toHaveAttribute("open", "");
+        const targetExpander = targetRow.locator(".expander").first();
+        await expect(targetExpander).toHaveClass(/\bexpanded\b/);
       }
 
       async function clickDbViewerReferenceLink(locator: Locator) {
         await expect(locator).toBeVisible({ timeout: 10000 });
         await locator.scrollIntoViewIfNeeded();
-        await locator.click({ force: true, timeout: 10000 });
+        await locator.click({ timeout: 10000 });
       }
     });
 
@@ -2133,9 +2251,10 @@ namespace DbViewer {
         await expandRecordDetails({ page, config, entityId: record.id });
         await page.locator(config.editButtonId(record.id)).click();
 
-        const workModelField = page.locator(`#db-viewer--job-postings--editor--work-model--record-${record.id}`);
+        const workModelField = page.locator(buildEditorFieldId({ page, config, testInfo, field: "work-model", recordId: record.id }));
         await expect(workModelField).toBeVisible();
         await expect(workModelField).toHaveJSProperty("tagName", "SELECT");
+        await expect(workModelField).toHaveValue("Remote");
 
         const workModelOptions = await workModelField.locator("option").allTextContents();
         expect(workModelOptions).toEqual(expect.arrayContaining(["Unknown", "Remote", "InOffice", "Hybrid"]));
@@ -2163,9 +2282,10 @@ namespace DbViewer {
         await expandRecordDetails({ page, config, entityId: record.id });
         await page.locator(config.editButtonId(record.id)).click();
 
-        const statusField = page.locator(`#db-viewer--job-applications--editor--status--record-${record.id}`);
+        const statusField = page.locator(buildEditorFieldId({ page, config, testInfo, field: "status", recordId: record.id }));
         await expect(statusField).toBeVisible();
         await expect(statusField).toHaveJSProperty("tagName", "SELECT");
+        await expect(statusField).toHaveValue("Draft");
 
         const statusOptions = await statusField.locator("option").allTextContents();
         expect(statusOptions).toEqual(
@@ -2244,10 +2364,6 @@ namespace DbViewer {
           await setEditorFieldValue({ field: "work-model", recordId: record.id, value: "Hybrid" });
           await setEditorFieldValue({ field: "url", recordId: record.id, value: "https://example.com/job/platform" });
           await setEditorFieldValue({ field: "document--type", recordId: record.id, value: "html" });
-          await page
-            .locator(buildEditorFieldId({ field: "document--content", recordId: record.id }))
-            .locator("xpath=ancestor::details[1]/summary")
-            .click();
           await setEditorFieldValue({ field: "document--content", recordId: record.id, value: "<h1>Staff Platform Engineer</h1>" });
 
           // scroll the cancel button to the top of the screen, to test that the record is scrolled back into the screen
@@ -2326,10 +2442,6 @@ namespace DbViewer {
           await setEditorFieldValue({ field: "job-title", recordId: record.id, value: "Staff Platform Engineer" });
           await setEditorFieldValue({ field: "date", recordId: record.id, value: "2026-02-20" });
           await setEditorFieldValue({ field: "document--type", recordId: record.id, value: "html" });
-          await page
-            .locator(buildEditorFieldId({ field: "document--content", recordId: record.id }))
-            .locator("xpath=ancestor::details[1]/summary")
-            .click();
           await setEditorFieldValue({ field: "document--content", recordId: record.id, value: "<h1>Platform Resume</h1>" });
 
           // scroll the cancel button to the top of the screen, to test that the record is scrolled back into the screen
@@ -2401,10 +2513,6 @@ namespace DbViewer {
 
           await setEditorFieldValue({ field: "name", recordId: record.id, value: "Platform Interview Template" });
           await setEditorFieldValue({ field: "document--type", recordId: record.id, value: "html" });
-          await page
-            .locator(buildEditorFieldId({ field: "document--content", recordId: record.id }))
-            .locator("xpath=ancestor::details[1]/summary")
-            .click();
           await setEditorFieldValue({
             field: "document--content",
             recordId: record.id,
@@ -2648,30 +2756,32 @@ namespace DbViewer {
         await expect(page.locator(config.cancelButtonId(entityId))).toBeVisible();
 
         if (config.actions.arrange) {
-          await config.actions.arrange({ page, config: config });
+          await config.actions.arrange({ page, config, testInfo });
         }
 
         if (config.actions.act) {
-          await config.actions.act({ page, config: config });
+          await config.actions.act({ page, config, testInfo });
         }
 
         const saveRequest = page.waitForRequest((request) => {
           const url = config.updateRoute(entityId);
-          return request.method() === "PUT" && request.url().endsWith(url) && request.postData() !== null;
+          return request.method() === "PATCH" && request.url().endsWith(url) && request.postData() !== null;
         });
 
         const saveResponse = page.waitForResponse((response) => {
           const url = config.updateRoute(entityId);
-          return response.request().method() === "PUT" && response.url().endsWith(url) && response.ok();
+          return response.request().method() === "PATCH" && response.url().endsWith(url);
         });
 
         await page.locator(config.saveButtonId(entityId)).click();
 
         await saveRequest;
-        await saveResponse;
+        const response = await saveResponse;
+        expect(response.ok(), await response.text()).toBeTruthy();
 
         if (config.actions.assert) {
-          await config.actions.assert({ page, config: config });
+          await expect(page.locator(config.formId())).not.toBeVisible();
+          await config.actions.assert({ page, config, testInfo });
         }
 
         // validate that the form and action buttons are in the correct post-edit state
@@ -2685,6 +2795,7 @@ namespace DbViewer {
     test.describe("Scenario Outline: Documents are editable", () => {
       type LocalEntityConfig = DbViewer.EntityConfig & {
         updateRoute: (id: number) => string;
+        documentProperty?: "document" | "promptDocument" | "responseDocument";
       };
 
       test(`Entity: Job Posting`, async ({ page }: { page: Page }, testInfo: TestInfo) => {
@@ -2723,6 +2834,18 @@ namespace DbViewer {
         await runTest_editDocumentWorkflow({ page, testInfo, config });
       });
 
+      for (const documentProperty of ["promptDocument", "responseDocument"] as const) {
+        test(`Entity: AI Prompt ${documentProperty === "promptDocument" ? "Prompt Document" : "Response Document"}`, async ({ page }, testInfo) => {
+          const config = {
+            ...build_common_entity({ build_id: (segments: string[]) => build_tab_id(["ai-prompts", ...segments]) }),
+            updateRoute: (id: number) => `/api/v1/ai-prompts/${id}`,
+            seeds: seedRecords["ai-prompts"],
+            documentProperty,
+          };
+          await runTest_editDocumentWorkflow({ page, testInfo, config });
+        });
+      }
+
       async function runTest_editDocumentWorkflow({
         page,
         testInfo,
@@ -2753,6 +2876,8 @@ namespace DbViewer {
 
         const original = config.seeds.primary.data;
         const record = config.seeds.primary.created;
+        const documentProperty = config.documentProperty ?? "document";
+        const documentField = documentProperty.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 
         if (!record) {
           throw new Error("Initial record not created.");
@@ -2763,21 +2888,17 @@ namespace DbViewer {
         }
 
         const verify = buildEditorVerifier({ page, config, testInfo, original, record });
-        await verify("document--type", original.document?.type);
-        await verify("document--content", original.document?.content);
+        await verify(`${documentField}--type`, original[documentProperty]?.type);
+        await verify(`${documentField}--content`, original[documentProperty]?.content);
 
-        await setEditorFieldValue({ page, config, testInfo, field: "document--type", recordId: record.id, value: "html" });
-        await page
-          .locator(buildEditorFieldId({ page, config, testInfo, field: "document--content", recordId: record.id }))
-          .locator("xpath=ancestor::details[1]/summary")
-          .click();
+        await setEditorFieldValue({ page, config, testInfo, field: `${documentField}--type`, recordId: record.id, value: "html" });
 
         const updatedDocumentContent = `<h1>${config.seeds.primary.name} updated</h1>`;
         await setEditorFieldValue({
           page,
           config,
           testInfo,
-          field: "document--content",
+          field: `${documentField}--content`,
           recordId: record.id,
           value: updatedDocumentContent,
         });
@@ -2786,21 +2907,26 @@ namespace DbViewer {
 
         const saveRequest = page.waitForRequest((request) => {
           const url = config.updateRoute(entityId);
-          return request.method() === "PUT" && request.url().endsWith(url) && request.postData() !== null;
+          return request.method() === "PATCH" && request.url().endsWith(url) && request.postData() !== null;
         });
 
         const saveResponse = page.waitForResponse((response) => {
           const url = config.updateRoute(entityId);
-          return response.request().method() === "PUT" && response.url().endsWith(url) && response.ok();
+          return response.request().method() === "PATCH" && response.url().endsWith(url);
         });
 
         await saveButton.click();
-        await saveRequest;
-        await saveResponse;
+        const request = await saveRequest;
+        expect(request.postDataJSON()).toEqual({
+          [documentProperty]: { id: record[documentProperty].id, type: "HTML", content: updatedDocumentContent },
+        });
+        const response = await saveResponse;
+        expect(response.ok(), await response.text()).toBeTruthy();
 
         const verifyDisplay = buildEditorDisplayVerifier({ page, config, testInfo, original, record });
-        await verifyDisplay("document--display--type", "html");
-        await verifyDisplay("document--display--content", updatedDocumentContent);
+        await expect(page.locator(config.formId())).not.toBeVisible();
+        await verifyDisplay(`${documentField}--display--type`, "html");
+        await verifyDisplay(`${documentField}--display--content`, updatedDocumentContent);
 
         await expect(page.locator(config.formId())).not.toBeVisible();
         await expect(page.locator(config.editButtonId(entityId))).toBeVisible();
@@ -2899,9 +3025,14 @@ namespace DbViewer {
 
         await expect(page.locator(config.formId())).not.toBeVisible();
         await expandRecordDetails({ page, config, entityId });
-        const actualValue = await page.locator(config.recordId(entityId)).locator("summary").first().textContent();
-        await expect(actualValue).toContain(String(summaryValue));
-        await expect(actualValue).not.toContain(editValue + " :: Updated");
+        const summary = page.locator(config.recordId(entityId)).locator(".expander > .header > .title").first();
+        await expect(summary).toContainText(String(summaryValue));
+        await expect(summary).not.toContainText(editValue + " :: Updated");
+        const persisted = await page.request.get(`http://localhost:5000/api/v1/${config.seeds.primary.route}/${entityId}`, {
+          headers: getTestHeaders(testInfo),
+        });
+        expect(persisted.ok()).toBeTruthy();
+        expect((await persisted.json())[config.editFieldObjectKey]).toBe(editValue);
       }
     });
   });
@@ -2911,7 +3042,7 @@ namespace DbViewer {
    *****************************************************/
 
   export type EntityConfig = {
-    name: string;
+    name?: string;
     buildId: (args: string[]) => string;
     recordId: (id: number) => string;
     editButtonId: (id: number) => string;
@@ -2925,7 +3056,7 @@ namespace DbViewer {
   };
 
   export type EntityRecordData = Record<string, any>;
-  export type EntityRecord = EntityRecordData & { id?: number };
+  export type EntityRecord = EntityRecordData & { id: number };
   export type EntitySeed = { name: string; route: string; data: EntityRecordData; created?: EntityRecord };
   export type EntitySeedDictionary = Record<string, EntitySeed>;
 
@@ -2948,25 +3079,30 @@ namespace DbViewer {
   export type InternalTestActionVerifierParams = {
     buildEditorFieldId: (params: BuildEditorFieldIdParams) => string;
     verifyField: (params: VerifyFieldParams) => Promise<void>;
-    verifyEditorField: (params: VerifyEditorFieldParams) => Promise<void>;
-    verifyEditorDisplayField: (params: VerifyEditorFieldParams) => Promise<void>;
+    verifyEditorField: (params: VerifyEditorFieldParams & Partial<PageConfigParams>) => Promise<void>;
+    verifyEditorDisplayField: (params: VerifyEditorFieldParams & Partial<PageConfigParams>) => Promise<void>;
     setEditorFieldValue: (params: SetEditorFieldValueParams) => Promise<void>;
-    buildEditorDisplayVerifier: (params: BuildKnownVerifierParams) => SimpleEditorVerifierFunction;
-    buildEditorVerifier: (params: BuildKnownVerifierParams) => SimpleEditorVerifierFunction;
+    buildEditorDisplayVerifier: (params: Omit<BuildKnownVerifierParams, "testInfo">) => SimpleEditorVerifierFunction;
+    buildEditorVerifier: (params: Omit<BuildKnownVerifierParams, "testInfo">) => SimpleEditorVerifierFunction;
   };
   export type InternalTestActionParams = PageConfigParams & InternalTestActionVerifierParams;
   type InternalTestAction = (params: InternalTestActionParams) => Promise<void>;
 
   function build_common_entity({ build_id }: { build_id: (segments: string[]) => string }) {
+    const section = build_id(["container"]);
+    const record = (id: number) => `${section}--record-${id}`;
     const result = {
       buildId: build_id,
       container: () => build_id(["container"]),
-      recordId: (id: number) => build_id([build_record_id(id)]),
-      editButtonId: (id: number) => build_id(["edit-button", `record-${id}`]),
-      formId: () => build_id(["editor"]),
-      saveButtonId: (id: number) => build_id(["editor", "save-button", `record-${id}`]),
-      cancelButtonId: (id: number) => build_id(["editor", "cancel-button", `record-${id}`]),
-      controlId: (controlName: string) => build_id([controlName]),
+      recordId: (id: number) => build_id(["container", build_record_id(id)]),
+      editButtonId: (id: number) => `${record(id)} button:text-is("Edit")`,
+      formId: () => `${section} [id^='entity-editor-']`,
+      saveButtonId: (id: number) => `${record(id)} [id^='entity-editor-'] > .header button:text-is("Save")`,
+      cancelButtonId: (id: number) => `${record(id)} [id^='entity-editor-'] > .header button:text-is("Cancel")`,
+      controlId: (controlName: string) => controlName === "count" ? `${section} > .header .count`
+        : controlName === "list" ? `${section} ul.data-list`
+        : controlName === "refresh-button" ? `${section} > .header button:text-is("Refresh")`
+        : build_id([controlName]),
       recordControlId: (id: number, controlName: string) => build_id([controlName, `record-${id}`]),
     };
     return result;
@@ -2992,8 +3128,8 @@ namespace DbViewer {
         verifyField: (params) => verifyField({ page, config, testInfo, ...params }),
         verifyEditorField: (params) => verifyEditorField({ page, config, testInfo, ...params }),
         verifyEditorDisplayField: (params) => verifyEditorDisplayField({ page, config, testInfo, ...params }),
-        buildEditorVerifier,
-        buildEditorDisplayVerifier,
+        buildEditorVerifier: (params) => buildEditorVerifier({ ...params, testInfo }),
+        buildEditorDisplayVerifier: (params) => buildEditorDisplayVerifier({ ...params, testInfo }),
         setEditorFieldValue: (params) => setEditorFieldValue({ page, config, testInfo, ...params }),
       });
     }
@@ -3011,9 +3147,32 @@ namespace DbViewer {
     return `record-${id}`;
   }
 
-  function buildEditorFieldId({ page, config, field, recordId }: PageConfigParams & BuildEditorFieldIdParams) {
-    const id = config.buildId(["editor", field, build_record_id(recordId)]);
-    return id;
+  function fieldLabel(field: string) {
+    if (field === "applied-on-date") {
+      return "Applied On";
+    }
+    if (field === "url") {
+      return "URL";
+    }
+
+    return field
+      .split(/-+/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  function buildEditorFieldId({
+    config,
+    field,
+    recordId,
+  }: Omit<PageConfigParams, "testInfo"> & { testInfo?: TestInfo } & BuildEditorFieldIdParams) {
+    const editor = `${config.recordId(recordId)} [id^='entity-editor-']`;
+    const documentField = field.split("--")[0];
+    if (["document", "prompt-document", "response-document"].includes(documentField)) {
+      const scope = documentField === "document" ? "" : `.field-editor.${documentField.replace("-document", "")}--field`;
+      return `${editor} ${scope} .document--editor.embedded .field-editor.${field.slice(documentField.length + 2)} :is(input, textarea, select)`;
+    }
+    return `${editor} .field-editor.${field.replace(/--/g, "-")} :is(input, textarea, select)`;
   }
 
   function buildEditorVerifier({ page, config, testInfo, original, record }: BuildKnownVerifierParams): SimpleEditorVerifierFunction {
@@ -3064,9 +3223,9 @@ namespace DbViewer {
 
   async function verifyEditorField({ page, config, testInfo, field, recordId, expectedValue }: PageConfigParams & VerifyEditorFieldParams) {
     const elementId = buildEditorFieldId({ page, config, testInfo, field, recordId });
-    const locator = page.locator(config.formId()).locator(`input${elementId}, textarea${elementId}, select${elementId}`);
+    const locator = page.locator(elementId);
     await expect(locator).toHaveCount(1);
-    await expect(locator).toHaveValue(expectedValue);
+    await expect(locator).toHaveValue(field.endsWith("--type") ? documentType(expectedValue) : expectedValue);
   }
 
   async function verifyDisplayField({ page, config, testInfo, elementId, expectedValue }: PageConfigParams & VerifyFieldParams) {
@@ -3084,22 +3243,30 @@ namespace DbViewer {
     recordId,
     expectedValue,
   }: PageConfigParams & VerifyEditorFieldParams) {
-    const elementId = buildEditorFieldId({ page, config, testInfo, field, recordId });
-    const directLocator = page.locator(elementId);
-
-    if ((await directLocator.count()) > 0) {
-      await verifyDisplayField({ page, config, testInfo, elementId, expectedValue });
-      return;
+    const row = page.locator(config.recordId(config.seeds.primary.created!.id));
+    await expandRecordDetails({ page, config, entityId: config.seeds.primary.created!.id });
+    const documentField = field.split("--")[0];
+    const isDocument = ["document", "prompt-document", "response-document"].includes(documentField);
+    const documentScope = isDocument && documentField !== "document" ? row.locator(`.entity-reference.${documentField}`) : row;
+    if (isDocument) {
+      const document = documentScope.locator("[id^='entity-display-document-display--']").first();
+      if (!(await document.evaluate((element) => element.classList.contains("expanded")))) {
+        await document.locator("> .header > .title").click();
+      }
     }
-
-    const summaryFieldNames = new Set(["id", "title", "name"]);
-    if (summaryFieldNames.has(field)) {
-      const summaryText = await page.locator(config.recordId(recordId)).locator("summary").first().textContent();
-      await expect(summaryText).toContain(expectedValue);
-      return;
+    const parts = field.split("--display--");
+    const scope = parts.length > 1 && !isDocument ? row.locator(`.entity-reference.${parts[0]}`) : documentScope;
+    if (parts.length > 1 && !isDocument) {
+      const reference = scope.locator(".expander").first();
+      if (!(await reference.evaluate((element) => element.classList.contains("expanded")))) {
+        await reference.locator("> .header > .title").click();
+      }
     }
-
-    await verifyDisplayField({ page, config, testInfo, elementId, expectedValue });
+    const fieldName = parts.length > 1 ? parts[1] : field;
+    const selector = isDocument ? `.document-${fieldName}` : `.value.${fieldName}`;
+    const expected = field.endsWith("--type") ? documentType(expectedValue)
+      : expectedValue;
+    await expect(scope.locator(selector).first()).toHaveText(expected);
   }
 
   async function expectTransientHighlight(locator: Locator, timeoutMs = 5000) {
@@ -3134,39 +3301,43 @@ namespace DbViewer {
     const tagName = await locator.evaluate((element) => element.tagName.toLowerCase());
 
     if (tagName === "select") {
-      await locator.selectOption(value);
+      await locator.selectOption(field.endsWith("--type") ? documentType(value) : value);
       return;
     }
 
     await locator.fill(value);
   }
 
+  function documentType(value: string) {
+    const types = ["Unknown", "HTML", "Markdown", "PDF", "Text", "Word", "Other"];
+    return types.find((type) => type.toLowerCase() === value.toLowerCase()) ?? value;
+  }
+
   async function expandSection({ page, config }: { page: Page; config: EntityConfig }) {
     const expander = page.locator(config.container());
     await expect(expander).toBeVisible({ timeout: 3000 });
-    if (!(await expander.getAttribute("open"))) {
-      const expanderSummary = expander.locator("summary").first();
-      await expanderSummary.click();
+    if (!(await expander.evaluate((element) => element.classList.contains("expanded")))) {
+      await expander.locator("> .header > .title").click();
     }
+    await expect(expander).toHaveClass(/\bexpanded\b/);
   }
 
   async function expandRecordDetails({ page, config, entityId }: { page: Page; config: EntityConfig; entityId: number }) {
     const form = page.locator(config.formId());
     if (await form.isVisible().catch(() => false)) {
-      await expect(form).toBeVisible();
       return;
     }
 
     const record = page.locator(config.recordId(entityId));
-    const details = record.locator("details.db-viewer-record-expander").first();
+    const details = record.locator(".expander").first();
     await expect(details).toBeVisible({ timeout: 3000 });
 
-    const isOpen = await details.evaluate((element) => (element as HTMLDetailsElement).open);
+    const isOpen = await details.evaluate((element) => element.classList.contains("expanded"));
     if (!isOpen) {
-      await details.locator("summary").first().click();
+      await details.locator("> .header > .title").click();
     }
 
-    await expect(details).toHaveJSProperty("open", true);
+    await expect(details).toHaveClass(/\bexpanded\b/);
   }
 
   async function seedTheDatabase({ page, testInfo, seeds }: { page: Page; testInfo: TestInfo; seeds: Record<string, EntitySeed> }) {
@@ -3174,89 +3345,31 @@ namespace DbViewer {
 
     for (const [_, seed] of seedEntries) {
       let payload = structuredClone(seed.data);
+      const linkedPosting = {
+        title: "Senior Engineer",
+        company: "Contoso",
+        location: "Remote",
+        salary: "$150,000",
+        workModel: "Remote",
+        url: "https://example.com/job/7",
+        document: {
+          title: "Senior Engineer",
+          type: "Markdown",
+          content: "# Senior Engineer",
+          source: "https://example.com/job/7",
+        },
+      };
 
       if (seed.route === "job-applications") {
-        if (!payload.sourceId) {
-          const sourceResponse = await callServer({
-            page,
-            testInfo,
-            route: "job-sources",
-            method: "POST",
-            data: { name: "LinkedIn" },
-          });
-          payload.sourceId = sourceResponse.json.id;
+        if (!payload.sourceId && !payload.source) {
+          delete payload.sourceId;
+          payload.source = { name: "LinkedIn" };
         }
 
-        if (!payload.jobPostingId) {
-          const jobPostingResponse = await callServer({
-            page,
-            testInfo,
-            route: "job-postings",
-            method: "POST",
-            data: {
-              title: "Senior Engineer",
-              company: "Contoso",
-              location: "Remote",
-              salary: "$150,000",
-              workModel: "Remote",
-              url: "https://example.com/job/7",
-              document: {
-                title: "Senior Engineer",
-                type: "markdown",
-                content: "# Senior Engineer",
-                source: "https://example.com/job/7",
-              },
-            },
-          });
-          payload.jobPostingId = jobPostingResponse.json.id;
+        if (!payload.jobPostingId && !payload.jobPosting) {
+          delete payload.jobPostingId;
+          payload.jobPosting = linkedPosting;
         }
-      }
-
-      if (seed.route === "job-questions" && !payload.jobApplicationId) {
-        const sourceResponse = await callServer({
-          page,
-          testInfo,
-          route: "job-sources",
-          method: "POST",
-          data: { name: "Question Source" },
-        });
-
-        const jobPostingResponse = await callServer({
-          page,
-          testInfo,
-          route: "job-postings",
-          method: "POST",
-          data: {
-            title: "Question Parent Role",
-            company: "Question Parent Company",
-            location: "Remote",
-            salary: "$120,000",
-            workModel: "Remote",
-            url: "https://example.com/question-parent-role",
-            document: {
-              title: "Question Parent Role",
-              type: "markdown",
-              content: "# Question Parent Role",
-              source: "question-parent-role",
-            },
-          },
-        });
-
-        const applicationResponse = await callServer({
-          page,
-          testInfo,
-          route: "job-applications",
-          method: "POST",
-          data: {
-            company: "Question Parent Company",
-            role: "Question Parent Role",
-            appliedOnDate: null,
-            status: 1,
-            sourceId: sourceResponse.json.id,
-            jobPostingId: jobPostingResponse.json.id,
-          },
-        });
-        payload.jobApplicationId = applicationResponse.json.id;
       }
 
       const response = await callServer({
@@ -3267,10 +3380,15 @@ namespace DbViewer {
         data: payload,
       });
 
+      expect(response.status).toBe(201);
+      expect(response.json.id).toBeGreaterThan(0);
       seed.created = response.json;
     }
 
     const entityId = seeds["primary"]?.created?.id;
+    if (!entityId) {
+      throw new Error("Expected a persisted primary fixture record.");
+    }
     return entityId;
   }
 }

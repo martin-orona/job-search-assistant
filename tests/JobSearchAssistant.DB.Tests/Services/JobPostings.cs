@@ -1,4 +1,5 @@
 using Dapper;
+using System.Text.Json;
 
 using JobSearchAssistant.DB.Models;
 using JobSearchAssistant.DB.Services;
@@ -217,6 +218,52 @@ public sealed class JobPostings_Service_Tests : SqliteTestBase
         Assert.Equal("Updated city", patched.Location);
         Assert.Equal("$115k", patched.Salary);
         Assert.Equal(WorkModel.Remote, patched.WorkModel);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task JobPostings_Patch_WithOnlyDocumentChanges_IsAtomic(bool parentExists)
+    {
+        RunMigrations();
+        var created = await new JobPostings().Create(new JobPosting
+        {
+            Title = "Document-only patch",
+            Company = "Contoso",
+            Location = "Remote",
+            WorkModel = WorkModel.Remote,
+            Salary = "$120,000",
+            Url = "https://example.com/document-only-patch",
+            Document = new Document
+            {
+                Title = "Document-only patch",
+                Type = DocumentType.Markdown,
+                Content = "Original content",
+                Source = "document-only-patch",
+            },
+        });
+        Assert.NotNull(created);
+        var fields = new Dictionary<string, object?>
+        {
+            ["document"] = JsonSerializer.SerializeToElement(new { id = created.DocumentId, content = "Updated content" }),
+        };
+        if (parentExists)
+        {
+            var patched = await new JobPostings().PartialUpdate(created.Id, fields);
+            Assert.NotNull(patched);
+            Assert.Equal(created.Title, patched.Title);
+            Assert.Equal(created.Company, patched.Company);
+            Assert.Equal(created.DocumentId, patched.DocumentId);
+            Assert.Equal("Updated content", patched.Document!.Content);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<JobSearchAssistant.Core.AppException>(() =>
+                new JobPostings().PartialUpdate(created.Id + 100, fields));
+        }
+        var document = await new Documents().GetById(created.DocumentId);
+        Assert.NotNull(document);
+        Assert.Equal(parentExists ? "Updated content" : "Original content", document.Content);
     }
 
     [Theory]

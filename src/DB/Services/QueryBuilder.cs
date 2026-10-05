@@ -80,36 +80,65 @@ public class QueryBuilder
             selectColumns.Add($"{baseAlias}.{columnName} as {columnName}");
         }
 
+        foreach (var jsonListProperty in GetJsonListProperties(modelType))
+        {
+            var columnName = Formatting.PascalToSnakeCase(jsonListProperty.Name);
+            selectColumns.Add($"{baseAlias}.{columnName} as {columnName}");
+        }
+
         foreach (var modelProperty in GetDeepModelMetadata(modelType))
         {
-            var nestedType = modelProperty.PropertyType;
-            var nestedTableName = GetTableNameForType(nestedType);
-            var nestedAlias = modelProperty.Alias;
+            if (modelProperty.IsCollection)
+            {
+                var nestedType = modelProperty.ElementType;
+                var nestedTableName = GetTableNameForType(nestedType);
+                var nestedAlias = modelProperty.Alias;
+                var joinAlias = $"{nestedAlias}_join";
+
+                if (modelProperty.Property.Name.Equals(nameof(JobApplication.Questions), StringComparison.OrdinalIgnoreCase)
+                    && nestedType == typeof(JobQuestion))
+                {
+                    joins.Add($"left join job_application_question {joinAlias} on {joinAlias}.job_application_id = {baseAlias}.id");
+                    joins.Add($"left join {nestedTableName} {nestedAlias} on {nestedAlias}.id = {joinAlias}.job_question_id");
+                }
+
+                foreach (var scalar in GetScalarProperties(nestedType))
+                {
+                    var columnName = Formatting.PascalToSnakeCase(scalar.Name);
+                    selectColumns.Add($"{nestedAlias}.{columnName} as {nestedAlias}_{columnName}");
+                }
+
+                continue;
+            }
+
+            var nestedTypeSingle = modelProperty.PropertyType;
+            var nestedTableNameSingle = GetTableNameForType(nestedTypeSingle);
+            var nestedAliasSingle = modelProperty.Alias;
             var foreignKeyColumn = Formatting.PascalToSnakeCase($"{modelProperty.Property.Name}Id");
 
-            joins.Add($"left join {nestedTableName} {nestedAlias} on {nestedAlias}.id = {baseAlias}.{foreignKeyColumn}");
+            joins.Add($"left join {nestedTableNameSingle} {nestedAliasSingle} on {nestedAliasSingle}.id = {baseAlias}.{foreignKeyColumn}");
 
-            foreach (var scalar in GetScalarProperties(nestedType))
+            foreach (var scalar in GetScalarProperties(nestedTypeSingle))
             {
                 if (scalar.Name.Equals(nameof(Model.Id), StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                if (typeof(ModelWithDocument).IsAssignableFrom(nestedType)
+                if (typeof(ModelWithDocument).IsAssignableFrom(nestedTypeSingle)
                     && scalar.Name.Equals(nameof(ModelWithDocument.DocumentId), StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
                 var columnName = Formatting.PascalToSnakeCase(scalar.Name);
-                selectColumns.Add($"{nestedAlias}.{columnName} as {nestedAlias}_{columnName}");
+                selectColumns.Add($"{nestedAliasSingle}.{columnName} as {nestedAliasSingle}_{columnName}");
             }
 
-            if (typeof(ModelWithDocument).IsAssignableFrom(nestedType) && nestedType != typeof(Document))
+            if (typeof(ModelWithDocument).IsAssignableFrom(nestedTypeSingle) && nestedTypeSingle != typeof(Document))
             {
-                var documentAlias = $"{nestedAlias}_document";
-                joins.Add($"left join document {documentAlias} on {documentAlias}.id = {nestedAlias}.document_id");
+                var documentAlias = $"{nestedAliasSingle}_document";
+                joins.Add($"left join document {documentAlias} on {documentAlias}.id = {nestedAliasSingle}.document_id");
 
                 foreach (var scalar in GetScalarProperties(typeof(Document)))
                 {
@@ -139,13 +168,26 @@ public class QueryBuilder
 
     internal static IReadOnlyList<DeepModelMetadata> GetDeepModelMetadata(Type modelType)
     {
-        return modelType
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => !CrudInfoGeneration.SystemFields.Contains(p.Name))
-            .Where(p => typeof(Model).IsAssignableFrom(p.PropertyType))
-            .Select(p => new DeepModelMetadata(p, p.PropertyType, Formatting.PascalToSnakeCase(p.Name)))
-            .ToList()
-            .AsReadOnly();
+        var metadata = new List<DeepModelMetadata>();
+
+        foreach (var property in modelType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => !CrudInfoGeneration.SystemFields.Contains(p.Name)))
+        {
+            if (typeof(Model).IsAssignableFrom(property.PropertyType))
+            {
+                metadata.Add(new DeepModelMetadata(property, property.PropertyType, property.PropertyType, Formatting.PascalToSnakeCase(property.Name), false));
+                continue;
+            }
+
+            if (property.PropertyType != typeof(string)
+                && typeof(System.Collections.IEnumerable).IsAssignableFrom(property.PropertyType)
+                && property.PropertyType.IsGenericType
+                && typeof(Model).IsAssignableFrom(property.PropertyType.GetGenericArguments()[0]))
+            {
+                metadata.Add(new DeepModelMetadata(property, property.PropertyType, property.PropertyType.GetGenericArguments()[0], Formatting.PascalToSnakeCase(property.Name), true));
+            }
+        }
+
+        return metadata.AsReadOnly();
     }
 
     internal static IReadOnlyList<PropertyInfo> GetBaseScalarProperties(Type modelType)
@@ -154,6 +196,20 @@ public class QueryBuilder
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
             .Where(p => !typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) || p.PropertyType == typeof(string))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    internal static IReadOnlyList<PropertyInfo> GetJsonListProperties(Type modelType)
+    {
+        return modelType
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => !CrudInfoGeneration.SystemFields.Contains(p.Name))
+            .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType))
+            .Where(p => p.PropertyType != typeof(string))
+            .Where(p => typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType))
+            .Where(p => p.PropertyType.IsGenericType)
+            .Where(p => !typeof(Model).IsAssignableFrom(p.PropertyType.GetGenericArguments()[0]))
             .ToList()
             .AsReadOnly();
     }
@@ -245,7 +301,7 @@ public enum JoinType
     Left,
 }
 
-public record DeepModelMetadata(PropertyInfo Property, Type PropertyType, string Alias);
+public record DeepModelMetadata(PropertyInfo Property, Type PropertyType, Type ElementType, string Alias, bool IsCollection = false);
 
 public record JoinDefinition
 {

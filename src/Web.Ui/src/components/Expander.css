@@ -1,0 +1,188 @@
+div.actionable-expander {
+  &.container {
+    border: 1px solid var(--border);
+    border-radius: var(--control-container-radius);
+    background: var(--bg);
+    padding: 0.5rem;
+
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    align-items: flex-start;
+    padding-top: 0.75rem;
+
+    & > details.expander {
+      /* Make the details element take up the remaining horizontal space */
+      flex-grow: 1;
+
+      & > summary.expander-summary {
+        align-items: center;
+        cursor: pointer;
+        list-style-position: outside;
+        margin-left: 20px; /* Provide space for the toggle marker */
+      }
+
+      & > .expander-content > .actions {
+        margin-bottom: 0.5rem;
+
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+
+        & > button {
+          padding: 0.15rem 0.5rem;
+          font-size: 0.75rem;
+        }
+      }
+    }
+
+    details.expander.expandable-data-list {
+      & > summary > .header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+
+        & > .title {
+          flex: 1;
+        }
+
+        & > .count {
+          flex: 1;
+        }
+      }
+
+      & > .expander-content > .data-list {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+    }
+  }
+
+  &.actions {
+    display: flex;
+    align-items: center;
+    min-height: 26px;
+
+    & > button {
+      padding: 0.15rem 0.5rem;
+      font-size: 0.75rem;
+    }
+  }
+}
+
+.ux.component.expander .button {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+@scope ( .ux.component.expander ) to ( .expander-content > *) {
+  :scope {
+    border: 1px solid var(--color-border);
+    border-radius: var(--control-container-radius);
+    background: var(--color-background);
+    padding: 0.5rem;
+
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  :scope.entity-display.being-deleted {
+    border-color: var(--color-danger);
+  }
+
+  :scope > .header {
+    display: flex;
+    flex-direction: row;
+    align-items: first baseline;
+    justify-content: space-between;
+    gap: 1rem;
+
+    /* adjust the hit target for the header so that the whole selector triggers the expand/collapse behavior */
+    margin-top: -0.5rem;
+    margin-bottom: -0.5rem;
+    margin-left: -0.5rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    padding-left: 0.5rem;
+
+    cursor: default;
+
+    .expanderIcon {
+      align-self: center;
+    }
+
+    .title {
+      font-size: 1rem;
+      margin-left: -0.5rem;
+      flex-grow: 1;
+    }
+
+    .subtitle {
+      color: var(--color-text-muted);
+      font-weight: bold;
+      /* text-transform: uppercase; */
+    }
+  }
+
+  :scope > .expander-content {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+  :scope.no-indent > .expander-content {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+@scope ( .ux.component.expander.actionable-expander ) to ( .actionable-expander > .header > .title > .normal-title > .title > * , .actionable-expander > .header > .title > .normal-title > .count > * , .actionable-expander > .header > .title > .actions > *) {
+  :scope > .header > .title {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+
+    & > .normal-title {
+      flex-grow: 1;
+
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+
+      & > .title {
+        flex-grow: 2;
+      }
+
+      & > .count {
+        flex-grow: 1;
+      }
+    }
+
+    & > .actions {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+  }
+}
+
+@scope ( .ux.component.expander.actionable-expander.expandable-data-list ) to ( .expander-content > ul > li > *) {
+  :scope > .expander-content > ul.data-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}

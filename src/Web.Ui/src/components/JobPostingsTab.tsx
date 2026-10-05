@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { onAutoCaptureTrigger, requestCaptureByUrlFromExtension, requestOpenUrlFromExtension } from "../extensionBridge";
+import { api } from "../utilities/api";
+import { useSimpleDialogErrors } from "../utilities/componentState";
+import { getPatch } from "../utilities/entities";
+import type { NewDocument } from "./Document";
+import { EntitySection } from "./EntitySection";
+import { JobPostingUi, type JobPosting, type NewJobPosting } from "./JobPosting";
 
 const jobPostUrlStorageKey = "job-post-url";
 const jobPostHideImagesStorageKey = "job-post-hide-images";
@@ -29,42 +35,6 @@ type ExtractedJobPosting = {
   formattedHtml: string;
   markdown: string;
   fileName: string;
-};
-
-type SaveJobPostingRequest = {
-  title: string;
-  company: string;
-  location: string;
-  salary: string;
-  workModel: WorkModel;
-  url: string;
-  document: {
-    title: string;
-    type: string;
-    content: string;
-    source: string | null;
-  };
-};
-
-type SaveJobPostingResponse = SavedJobPostingSummary;
-
-type SavedJobPostingSummary = {
-  id: number;
-  title: string;
-  company: string;
-  location: string;
-  salary: string;
-  workModel: WorkModel;
-  url: string;
-  documentId: number;
-  createdAt: string;
-  document?: {
-    id: number;
-    title: string;
-    type: string;
-    content: string;
-    source: string | null;
-  } | null;
 };
 
 function escapeHtml(value: string) {
@@ -186,27 +156,14 @@ function formatWorkModelLabel(workModel: WorkModel) {
   }
 }
 
-function formatSavedDate(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 async function fetchSavedJobPostings() {
-  const response = await fetch("/api/v1/job-postings");
+  const response = await fetch("/api/v1/job-postings" + "?deep=true");
 
   if (!response.ok) {
     throw new Error((await response.text()) || "Unable to load saved job postings.");
   }
 
-  return (await response.json()) as SavedJobPostingSummary[];
+  return (await response.json()) as JobPosting[];
 }
 
 /** Convert a DOM element's content to Markdown (headings, lists, paragraphs). */
@@ -345,16 +302,17 @@ function extractIndeedJobPosting(snapshot: CapturedSnapshot): ExtractedJobPostin
   const fileName = `${sanitizeFileName(company)} - ${sanitizeFileName(title)} - ${getLocalDateToken()} - ${fileWorkMode}.md`;
 
   return {
-    source: snapshot.url ?? "",
     title,
     company,
     location,
     salary,
+    url: snapshot.url ?? "",
     workModel,
+    source: snapshot.url ?? "",
     fileName,
     formattedHtml: root.outerHTML,
     markdown: descriptionText || "No job description found.",
-  };
+  } as ExtractedJobPosting;
 }
 
 function extractGenericJobPosting(snapshot: CapturedSnapshot): ExtractedJobPosting {
@@ -390,11 +348,9 @@ function extractJobPosting(snapshot: CapturedSnapshot): ExtractedJobPosting {
   return extractGenericJobPosting(snapshot);
 }
 
-type JobPostingsTabProps = {
-  onAnalyze: (jobPosting: SavedJobPostingSummary) => void;
-};
+type JobPostingsTabProps = {};
 
-export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
+export function JobPostingsTab({}: JobPostingsTabProps) {
   const [urlInput, setUrlInput] = useState(() => {
     return window.localStorage.getItem(jobPostUrlStorageKey) ?? "";
   });
@@ -402,7 +358,7 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
   const [formattedHtml, setFormattedHtml] = useState("");
   const [markdownContent, setMarkdownContent] = useState("");
   const [capturedJobPosting, setCapturedJobPosting] = useState<ExtractedJobPosting | null>(null);
-  const [savedJobPostings, setSavedJobPostings] = useState<SavedJobPostingSummary[]>([]);
+  const [savedJobPostings, setSavedJobPostings] = useState<JobPosting[]>([]);
   const [savedCardOpenState, setSavedCardOpenState] = useState<Record<number, boolean>>({});
   const [hideImages, setHideImages] = useState(() => {
     return window.localStorage.getItem(jobPostHideImagesStorageKey) === "true";
@@ -431,6 +387,8 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
     return stored == null ? false : stored === "true";
   });
   const [status, setStatus] = useState("Enter a posting URL and click go.");
+
+  const [deletionErrors, setDeletionError, clearDeletionError] = useSimpleDialogErrors();
 
   const refreshSavedJobPostings = async (announce = false) => {
     try {
@@ -567,64 +525,11 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
     }
 
     void (async () => {
-      const response = await fetch("/api/v1/job-postings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: capturedJobPosting.title,
-          company: capturedJobPosting.company,
-          location: capturedJobPosting.location,
-          salary: capturedJobPosting.salary,
-          workModel: capturedJobPosting.workModel,
-          url: capturedJobPosting.source,
-          document: {
-            title: capturedJobPosting.title,
-            type: "Markdown",
-            content: markdownContent,
-            source: capturedJobPosting.source,
-          },
-        } satisfies SaveJobPostingRequest),
-      });
-
-      if (!response.ok) {
-        throw new Error((await response.text()) || "Unable to save the job posting.");
-      }
-
-      const saved = (await response.json()) as SaveJobPostingResponse;
-      setSavedJobPostings(await fetchSavedJobPostings());
-      setStatus(`Saved ${saved.title} (${saved.company || "Unknown company"}).`);
+      const data = convertToNewJobPosting(capturedJobPosting, markdownContent);
+      await saveJobPosting({ posting: data as JobPosting });
     })().catch((error) => {
       setStatus(error instanceof Error ? error.message : "Unable to save the job posting.");
     });
-  };
-
-  const handleDeleteJobPosting = async (id: number) => {
-    const confirmed = window.confirm("Delete this saved job posting?");
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/v1/job-postings/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error((await response.text()) || "Unable to delete saved job posting.");
-      }
-
-      setSavedJobPostings((current) => current.filter((posting) => posting.id !== id));
-      setSavedCardOpenState((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      setStatus("Job posting deleted.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to delete saved job posting.");
-    }
   };
 
   return (
@@ -734,120 +639,156 @@ export function JobPostingsTab({ onAnalyze }: JobPostingsTabProps) {
         </details>
       </details>
 
-      <details
-        id="job-postings--saved-job-postings--container"
-        className="job-postings-expander"
+      <SavedJobPostings
         open={savedOpen}
-        onToggle={(event) => setSavedOpen(event.currentTarget.open)}
-      >
-        <summary className="job-postings-expander-summary">
-          <span>Saved Job Postings</span>
-          <button
-            id="job-postings--saved-job-postings--refresh-button"
-            type="button"
-            className="button expander-summary-button"
-            aria-label="Refresh saved job postings"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void refreshSavedJobPostings(true);
-            }}
-          >
-            Refresh
-          </button>
-        </summary>
-        {savedJobPostings.length === 0 ? (
-          <p className="job-postings-empty-state">No saved job postings yet.</p>
-        ) : (
-          <div className="job-postings-saved-list">
-            {savedJobPostings.map((jobPosting) => {
-              const isSavedCardOpen = savedCardOpenState[jobPosting.id] ?? false;
-
-              return (
-                <div key={jobPosting.id} className="job-postings-saved-item">
-                  <div
-                    className="job-postings-saved-summary"
-                    role="button"
-                    tabIndex={0}
-                    aria-expanded={isSavedCardOpen}
-                    onClick={() =>
-                      setSavedCardOpenState((current) => ({
-                        ...current,
-                        [jobPosting.id]: !current[jobPosting.id],
-                      }))
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSavedCardOpenState((current) => ({
-                          ...current,
-                          [jobPosting.id]: !current[jobPosting.id],
-                        }));
-                      }
-                    }}
-                  >
-                    <span>
-                      {[
-                        jobPosting.company,
-                        jobPosting.title,
-                        formatWorkModelLabel(jobPosting.workModel),
-                        jobPosting.salary || "Unknown Salary",
-                      ].join(" | ")}
-                    </span>
-                    <div className="card-actions">
-                      <button
-                        type="button"
-                        className="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onAnalyze(jobPosting);
-                        }}
-                      >
-                        Analyze
-                      </button>
-                      <button
-                        type="button"
-                        className="button button--delete"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleDeleteJobPosting(jobPosting.id);
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-
-                  {isSavedCardOpen && (
-                    <div className="job-postings-saved-details">
-                      <div>{jobPosting.salary || "Unknown Salary"}</div>
-                      <div>
-                        {formatWorkModelLabel(jobPosting.workModel)} {jobPosting.location}
-                      </div>
-                      <div>
-                        {formatSavedDate(jobPosting.createdAt)}
-                        <span className="job-postings-saved-separator">·</span>
-                        <a href={jobPosting.url} target="_blank" rel="noreferrer">
-                          {jobPosting.url}
-                        </a>
-                      </div>
-
-                      <details className="job-postings-saved-source-expander" open={false}>
-                        <summary>Job Post</summary>
-                        <textarea
-                          className="job-postings-markdown job-postings-saved-markdown"
-                          readOnly
-                          value={jobPosting.document?.content || "No markdown available for this posting."}
-                        />
-                      </details>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </details>
+        onExpanded={() => setSavedOpen(true)}
+        onCollapsed={() => setSavedOpen(false)}
+        data={savedJobPostings as JobPosting[]}
+        reloadData={async () => await refreshSavedJobPostings(true)}
+        onCreateRecord={createNewJobPosting}
+        onRemoveRecord={onRemoveJobPostingFromDisplay}
+        onSave={saveJobPosting}
+        onDelete={deleteJobPosting}
+        deletionErrors={deletionErrors}
+        setDeletionError={setDeletionError}
+        clearDeletionError={clearDeletionError}
+      />
     </section>
+  );
+
+  function convertToNewJobPosting(captured: ExtractedJobPosting, markdownContent: string) {
+    const data = {
+      title: captured.title,
+      company: captured.company,
+      location: captured.location,
+      salary: captured.salary,
+      url: captured.source,
+      workModel: captured.workModel,
+      document: {
+        title: captured.title,
+        type: "Markdown",
+        content: markdownContent,
+        source: captured.source,
+      } as NewDocument,
+    } as NewJobPosting;
+    return data;
+  }
+
+  async function createNewJobPosting() {
+    setSavedJobPostings((prev) => [{ id: 0 } as JobPosting, ...prev]);
+  }
+
+  async function onRemoveJobPostingFromDisplay(id: number) {
+    setSavedJobPostings((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  async function saveJobPosting({ posting, shouldPropagateError }: { posting: JobPosting; shouldPropagateError?: boolean }) {
+    try {
+      const saved = posting.id ? await updateJobPosting(posting) : await createJobPosting(posting);
+
+      setSavedJobPostings(await fetchSavedJobPostings());
+      setStatus(`Saved ${saved.title} (${saved.company || "Unknown company"}).`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to save the job posting.");
+      if (shouldPropagateError) {
+        throw error;
+      }
+    }
+  }
+
+  async function createJobPosting(posting: JobPosting) {
+    return await api.post<JobPosting>({
+      endpoint: "/api/v1/job-postings",
+      data: posting,
+      defaultErrorMessage: "Unable to save the job posting.",
+    });
+  }
+
+  async function updateJobPosting(updated: JobPosting) {
+    const original = savedJobPostings.find((item) => item.id === updated.id);
+    if (!original) {
+      throw new Error(`Failed to save job posting. No matching original job posting [${updated.id}] found.`);
+    }
+
+    return await api.patch<JobPosting>({
+      endpoint: "/api/v1/job-postings",
+      id: updated.id,
+      data: getPatch(original, updated),
+      defaultErrorMessage: `Unable to update saved job posting [${updated.id}].`,
+    });
+  }
+
+  async function deleteJobPosting({ id, shouldPropagateError }: { id: number; shouldPropagateError?: boolean }) {
+    try {
+      await api.delete({ endpoint: `/api/v1/job-postings`, id, defaultErrorMessage: `Unable to delete saved job posting [${id}].` });
+      setSavedJobPostings((current) => current.filter((posting) => posting.id !== id));
+      setSavedCardOpenState((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setStatus("Job posting deleted.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : `Unable to delete saved job posting [${id}].`);
+      if (shouldPropagateError) {
+        throw error;
+      }
+    }
+  }
+}
+
+function SavedJobPostings({
+  open,
+  onExpanded,
+  onCollapsed,
+  data,
+  reloadData,
+  onCreateRecord,
+  onRemoveRecord,
+  onSave,
+
+  onDelete,
+  deletionErrors,
+  setDeletionError,
+  clearDeletionError,
+}: {
+  open: boolean;
+  onExpanded: () => void;
+  onCollapsed: () => void;
+  data: JobPosting[];
+  reloadData: () => Promise<void>;
+  onCreateRecord: () => void;
+  onRemoveRecord: (id: number) => void;
+  onSave: (params: { posting: JobPosting; shouldPropagateError?: boolean }) => Promise<void>;
+
+  onDelete: (params: { id: number; shouldPropagateError?: boolean }) => Promise<void>;
+  deletionErrors: Record<number, string>;
+  setDeletionError: (itemId: number, error: string) => void;
+  clearDeletionError: (itemId: number) => void;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+
+  return (
+    <EntitySection<JobPosting>
+      id="job-postings--saved-job-postings--container"
+      title="Saved Job Postings"
+      className="job-postings-expander job-postings-list"
+      open={open}
+      onExpanded={onExpanded}
+      onCollapsed={onCollapsed}
+      data={data}
+      isLoading={isLoading}
+      reloadData={reloadData}
+      onCreateRecord={onCreateRecord}
+      onRemoveRecord={onRemoveRecord}
+      onSave={async ({ entity }) => await onSave({ posting: entity, shouldPropagateError: true })}
+      ListItemUi={JobPostingUi}
+      itemPropName="posting"
+      onDelete={({ id }) => onDelete({ id, shouldPropagateError: true })}
+      deletionErrors={deletionErrors}
+      setDeletionError={setDeletionError}
+      clearDeletionError={clearDeletionError}
+      // itemPropName="jobPosting"
+    />
   );
 }

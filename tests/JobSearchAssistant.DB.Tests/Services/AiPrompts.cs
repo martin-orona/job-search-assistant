@@ -73,6 +73,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "resume-match",
+            AiName = "gpt-4o-mini",
             AiUrl = "https://example.com/ai/resume-match",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,
@@ -96,6 +97,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         Assert.NotNull(created);
         Assert.NotEqual(0, created.Id);
         Assert.Equal("resume-match", created.Name);
+        Assert.Equal("gpt-4o-mini", created.AiName);
         Assert.Equal("https://example.com/ai/resume-match", created.AiUrl);
         Assert.Equal(jobPosting.Id, created.JobPostingId);
         Assert.Equal(resume.Id, created.ResumeId);
@@ -114,6 +116,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "ml-fit",
+            AiName = "claude-3.5-sonnet",
             AiUrl = "https://example.com/ai/ml-fit",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,
@@ -140,6 +143,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         Assert.NotNull(fetched);
         Assert.Equal(created.Id, fetched!.Id);
         Assert.Equal("ml-fit", fetched.Name);
+        Assert.Equal("claude-3.5-sonnet", fetched.AiName);
         Assert.Equal("https://example.com/ai/ml-fit", fetched.AiUrl);
     }
 
@@ -153,6 +157,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "initial-ai-prompt",
+            AiName = "gpt-4o",
             AiUrl = "https://example.com/ai/initial",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,
@@ -183,6 +188,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         {
             Id = created.Id,
             Name = "updated-ai-prompt",
+            AiName = "gpt-4.1",
             AiUrl = "https://example.com/ai/updated",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,
@@ -196,6 +202,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         Assert.NotNull(updated);
         Assert.Equal(created.Id, updated!.Id);
         Assert.Equal("updated-ai-prompt", updated.Name);
+        Assert.Equal("gpt-4.1", updated.AiName);
         Assert.Equal("https://example.com/ai/updated", updated.AiUrl);
     }
 
@@ -209,6 +216,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "patch-before",
+            AiName = "o3-mini",
             AiUrl = "https://example.com/ai/before",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,
@@ -232,12 +240,14 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
 
         var patched = await new AiPrompts().PartialUpdate(created.Id, new Dictionary<string, object?>
         {
+            ["AiName"] = "gpt-4o-mini",
             ["AiUrl"] = "https://example.com/ai/after"
         });
 
         Assert.NotNull(patched);
         Assert.Equal(created.Id, patched!.Id);
         Assert.Equal("patch-before", patched.Name);
+        Assert.Equal("gpt-4o-mini", patched.AiName);
         Assert.Equal("https://example.com/ai/after", patched.AiUrl);
     }
 
@@ -251,6 +261,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "delete-me",
+            AiName = "gemini-1.5-pro",
             AiUrl = "https://example.com/ai/delete-me",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,
@@ -293,6 +304,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "graph-create",
+            AiName = "claude-3-opus",
             AiUrl = "https://example.com/ai/graph-create",
             JobPosting = new JobPosting
             {
@@ -392,6 +404,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "ids-only",
+            AiName = "grok-beta",
             AiUrl = "https://example.com/ai/ids-only",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,
@@ -418,6 +431,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var exception = await Assert.ThrowsAsync<JobSearchAssistant.Core.ValidationException>(() => new AiPrompts().Create(new AiPrompt
         {
             Name = "missing-both",
+            AiName = "mistral-large",
             AiUrl = "https://example.com/ai/missing-both",
             ResumeId = resume.Id,
             AiPromptTemplateId = template.Id,
@@ -451,6 +465,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var exception = await Assert.ThrowsAsync<JobSearchAssistant.Core.ValidationException>(() => new AiPrompts().Create(new AiPrompt
         {
             Name = "object-only",
+            AiName = "llama-3.1",
             AiUrl = "https://example.com/ai/object-only",
             JobPosting = jobPosting,
             ResumeId = resume.Id,
@@ -487,6 +502,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var exception = await Assert.ThrowsAsync<JobSearchAssistant.Core.ValidationException>(() => new AiPrompts().Create(new AiPrompt
         {
             Name = "object-with-id-and-fk",
+            AiName = "command-r-plus",
             AiUrl = "https://example.com/ai/object-with-id-and-fk",
             JobPosting = jobPosting,
             JobPostingId = jobPosting.Id,
@@ -525,6 +541,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var exception = await Assert.ThrowsAsync<JobSearchAssistant.Core.ValidationException>(() => new AiPrompts().Create(new AiPrompt
         {
             Name = "contradictory",
+            AiName = "command-r",
             AiUrl = "https://example.com/ai/contradictory",
             JobPosting = jobPosting,
             JobPostingId = otherJobPosting.Id,
@@ -562,6 +579,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var exception = await Assert.ThrowsAsync<JobSearchAssistant.Core.ValidationException>(() => new AiPrompts().Create(new AiPrompt
         {
             Name = "new-object-and-id",
+            AiName = "deepseek-chat",
             AiUrl = "https://example.com/ai/new-object-and-id",
             JobPosting = new JobPosting
             {
@@ -614,6 +632,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         await Assert.ThrowsAsync<JobSearchAssistant.Core.DatabaseException>(() => new AiPrompts().Create(new AiPrompt
         {
             Name = "unknown-fk",
+            AiName = "phi-3-mini",
             AiUrl = "https://example.com/ai/unknown-fk",
             JobPostingId = 999999,
             ResumeId = resume.Id,
@@ -645,6 +664,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var exception = await Assert.ThrowsAsync<JobSearchAssistant.Core.ValidationException>(() => new AiPrompts().Create(new AiPrompt
         {
             Name = "negative-fk",
+            AiName = "mixtral-8x7b",
             AiUrl = "https://example.com/ai/negative-fk",
             JobPostingId = -1,
             ResumeId = resume.Id,
@@ -679,6 +699,7 @@ public sealed class AiPrompts_Service_Tests : SqliteTestBase
         var exception = await Assert.ThrowsAsync<JobSearchAssistant.Core.ValidationException>(() => new AiPrompts().Create(new AiPrompt
         {
             Name = "negative-child-id",
+            AiName = "gemma-2",
             AiUrl = "https://example.com/ai/negative-child-id",
             JobPosting = new JobPosting
             {

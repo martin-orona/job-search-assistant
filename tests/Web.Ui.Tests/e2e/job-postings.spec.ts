@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   callServer,
   cleanupDbViewerTestFlow,
@@ -8,12 +8,97 @@ import {
   resetPersistedUiState,
 } from "./helpers";
 
+declare global {
+  interface Window {
+    jobPostingBridge: (type: string, url: string) => Promise<unknown>;
+  }
+}
+
+const jobPostingUrl = "https://www.indeed.com/viewjob?jk=455de5af61ae4e7a";
+const jobPostingHtml = `<!doctype html>
+<html><head><title>Senior Software Engineer - Acme Corp</title></head><body>
+  <div class="jobsearch-JobComponent">
+    <div class="jobsearch-InfoHeaderContainer">
+      <h1>Senior Software Engineer</h1>
+      <div data-testid="inlineHeader-companyName"><a>Acme Corp</a></div>
+      <div data-testid="job-location">Remote</div>
+      <div data-testid="salaryInfoAndJobType"><span>$150,000 - $180,000 a year</span></div>
+    </div>
+    <div class="jobsearch-JobComponent-description">
+      <p>We are seeking a Senior Software Engineer to build modern web applications.</p>
+      <ul><li>Experience with TypeScript and React</li><li>Experience with C# and .NET</li></ul>
+    </div>
+  </div>
+</body></html>`;
+
+async function installJobPostingBridge(page: Page) {
+  await page.context().route(jobPostingUrl, (route) => route.fulfill({ contentType: "text/html", body: jobPostingHtml }));
+  await page.exposeBinding("jobPostingBridge", async (_source, type: string, url: string) => {
+    if (type === "OPEN_URL_VISIBLE") {
+      const postingPage = await page.context().newPage();
+      await postingPage.goto(url);
+      await postingPage.bringToFront();
+      return { ok: true, snapshot: { url: postingPage.url() } };
+    }
+    const postingPage = page
+      .context()
+      .pages()
+      .find((candidate) => candidate.url() === url);
+    if (!postingPage) {
+      return { ok: false, error: "No job posting tab is open for this URL." };
+    }
+    return {
+      ok: true,
+      snapshot: {
+        title: await postingPage.title(),
+        url,
+        html: await postingPage.content(),
+        text: await postingPage.locator("body").innerText(),
+      },
+    };
+  });
+  await page.addInitScript(() => {
+    window.addEventListener("message", async (event) => {
+      const message = event.data;
+      if (message?.source !== "job-search-assistant-web-ui" || !["OPEN_URL_VISIBLE", "CAPTURE_TAB_BY_URL"].includes(message.type)) {
+        return;
+      }
+      const response = await window.jobPostingBridge(message.type, message.url);
+      window.postMessage({ source: "job-search-assistant-extension", requestId: message.requestId, response }, "*");
+    });
+  });
+}
+
+async function openJobPosting(page: Page) {
+  await page.getByLabel("Posting URL").fill(jobPostingUrl);
+  const opened = page.context().waitForEvent("page");
+  await page.getByRole("button", { name: "Go", exact: true }).click();
+  const postingPage = await opened;
+  await expect(postingPage).toHaveURL(jobPostingUrl);
+  await expect(postingPage.getByRole("heading", { name: "Senior Software Engineer" })).toBeVisible();
+  return postingPage;
+}
+
+async function captureJobPosting(page: Page) {
+  await openJobPosting(page);
+  await page.bringToFront();
+  await page.getByRole("button", { name: "Capture", exact: true }).click();
+  await expect(page.frameLocator("#job-postings--job-post-page--content").locator("h1")).toHaveText("Senior Software Engineer");
+}
+
 test.describe("Feature: Job Postings", () => {
-  test.beforeEach(async ({ page, context, browser, request }, testInfo) => {
-    console.log("Setting up for test:", testInfo.title, testInfo.testId);
+  test.beforeEach(async ({ page }, testInfo) => {
     await resetPersistedUiState(page);
     await initiateDbViewerTestFlow(page, testInfo);
     await cleanupDbViewerTestFlow(page, testInfo);
+    await installJobPostingBridge(page);
+    const initialList = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/v1/job-postings" && response.request().method() === "GET",
+    );
+    await page.goto("/");
+    const response = await initialList;
+    expect(response.ok()).toBeTruthy();
+    expect(await response.json(), "Each flow must start with an empty real-server database.").toEqual([]);
   });
 
   test.afterEach(async ({ page }, testInfo) => {
@@ -47,310 +132,98 @@ test.describe("Feature: Job Postings", () => {
       ))();
   });
 
-  test("Scenario: Navigate to a job posting", async ({ page, context }, testInfo) => {
-    const jobPostingUrl = "https://example.com/jobs/seeded-job-posting";
-
-    const seedResponse = await callServer({
-      page,
-      testInfo,
-      route: "job-postings",
-      method: "POST",
-      data: {
-        title: "Seeded Job Posting",
-        company: "Contoso",
-        location: "Remote",
-        salary: "$150,000",
-        workModel: "Remote",
-        url: jobPostingUrl,
-        document: {
-          title: "Seeded Job Posting",
-          type: "markdown",
-          content: "# Seeded Job Posting",
-          source: jobPostingUrl,
-        },
-      },
-    });
-    expect(seedResponse.ok, "The seeded job posting must be created before navigating to it.").toBeTruthy();
-
-    // Mock the browser extension bridge to resolve OPEN_URL_VISIBLE without requiring a real popup event.
-    await page.addInitScript(() => {
-      window.addEventListener("message", (event) => {
-        const data = event.data;
-        if (data?.source === "job-search-assistant-web-ui" && data.type === "OPEN_URL_VISIBLE") {
-          window.postMessage(
-            {
-              source: "job-search-assistant-extension",
-              requestId: data.requestId,
-              response: {
-                ok: true,
-                snapshot: { url: data.url },
-              },
-            },
-            "*",
-          );
-        }
-      });
-    });
-
-    // Given the user is on the Job Postings screen
-    await page.goto("/");
-    const jobPostingsTab = page.getByRole("tab", { name: "Job Postings" });
-    await expect(jobPostingsTab).toHaveAttribute("aria-selected", "true");
-
-    // When the user types/pastes the URL into the URL textbox
-    const urlInput = page.getByLabel("Posting URL");
-    await urlInput.fill(jobPostingUrl);
-
-    // And clicks on the Go button, the app confirms the extension accepted the URL and updates the status.
-    await page.getByRole("button", { name: "Go", exact: true }).click();
-
-    await expect
-      .poll(async () => await page.locator(".job-postings-status").textContent(), {
-        timeout: 10000,
-      })
-      .toContain(`Opened ${jobPostingUrl}`);
+  test("Scenario: Navigate to a job posting", async ({ page }) => {
+    const postingPage = await openJobPosting(page);
+    await expect.poll(() => postingPage.evaluate(() => document.hasFocus())).toBe(true);
   });
 
-  test("Scenario: Capture a job posting", async ({ page, context }) => {
-    const jobPostingUrl = "https://www.indeed.com/viewjob?jk=455de5af61ae4e7a";
+  test("Scenario: Navigate to the Job Postings screen", async ({ page }) => {
+    await page.getByRole("tab", { name: "Job Applications", exact: true }).click();
+    const tab = page.getByRole("tab", { name: "Job Postings", exact: true });
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tabpanel", { name: "Job Postings", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Job Postings", exact: true })).toBeVisible();
+  });
 
-    await page.route("**/api/v1/job-postings", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      });
-    });
-
-    const sampleHtml = `
-      <div class="jobsearch-JobComponent">
-        <div class="jobsearch-InfoHeaderContainer">
-          <h1>Senior Software Engineer</h1>
-          <div data-testid="inlineHeader-companyName"><a>Acme Corp</a></div>
-          <div data-testid="job-location">Remote</div>
-          <div data-testid="salaryInfoAndJobType"><span>$150,000 - $180,000 a year</span></div>
-        </div>
-        <div class="jobsearch-JobComponent-description">
-          <p>We are seeking a Senior Software Engineer to build modern web applications.</p>
-          <ul>
-            <li>Experience with TypeScript and React</li>
-            <li>Experience with C# and .NET</li>
-          </ul>
-        </div>
-      </div>
-    `;
-    const sampleText =
-      "Senior Software Engineer\nAcme Corp\nRemote\n$150,000 - $180,000 a year\nWe are seeking a Senior Software Engineer to build modern web applications.";
-
-    // Mock the extension bridge for OPEN_URL_VISIBLE and CAPTURE_TAB_BY_URL.
-    // The Go flow uses browser messaging, not a real popup window.
-    await page.addInitScript(
-      ({ expectedUrl, html, text }) => {
-        window.addEventListener("message", (event) => {
-          const data = event.data;
-          if (data?.source !== "job-search-assistant-web-ui") {
-            return;
-          }
-
-          if (data.type === "OPEN_URL_VISIBLE") {
-            window.postMessage(
-              {
-                source: "job-search-assistant-extension",
-                requestId: data.requestId,
-                response: {
-                  ok: true,
-                  snapshot: { url: data.url },
-                },
-              },
-              "*",
-            );
-          } else if (data.type === "CAPTURE_TAB_BY_URL") {
-            window.postMessage(
-              {
-                source: "job-search-assistant-extension",
-                requestId: data.requestId,
-                response: {
-                  ok: true,
-                  snapshot: {
-                    title: "Senior Software Engineer - Acme Corp",
-                    url: expectedUrl,
-                    html,
-                    text,
-                  },
-                },
-              },
-              "*",
-            );
-          }
-        });
-      },
-      { expectedUrl: jobPostingUrl, html: sampleHtml, text: sampleText },
-    );
-
-    // Given the user is on the Job Postings screen
-    await page.goto("/");
-    const jobPostingsTab = page.getByRole("tab", { name: "Job Postings" });
-    await expect(jobPostingsTab).toHaveAttribute("aria-selected", "true");
-
-    // And there is an open tab to the URL in the URL textbox
-    const urlInput = page.getByLabel("Posting URL");
-    await urlInput.fill(jobPostingUrl);
-
-    await page.getByRole("button", { name: "Go", exact: true }).click();
-    await expect(page.locator(".job-postings-status")).toContainText(`Opened ${jobPostingUrl}`);
-
-    // When the user clicks on the Capture button
-    await page.getByRole("button", { name: "Capture", exact: true }).click();
-
-    // Then the job posting will be copied from the job posting page/tab
-    await expect(page.locator(".job-postings-status")).toContainText("Captured Senior Software Engineer.");
-
-    // And the job posting page will be visible in the Job Post Page display
+  test("Scenario: Capture a job posting", async ({ page }) => {
+    await captureJobPosting(page);
     const jobPostFrame = page.frameLocator("#job-postings--job-post-page--content");
     await expect(jobPostFrame.locator("h1")).toContainText("Senior Software Engineer");
 
-    // And the extracted job posting content will be viewable in the Formatted Content display
     const formattedSummary = page.locator(".job-postings-expander summary", { hasText: "Formatted Content" });
     await formattedSummary.click();
     const formattedContent = page.locator(".job-postings-formatted");
     await expect(formattedContent).toBeVisible();
     await expect(formattedContent).toContainText("Senior Software Engineer");
     await expect(formattedContent).toContainText("Acme Corp");
+    await expect(formattedContent.locator("li")).toHaveText(["Experience with TypeScript and React", "Experience with C# and .NET"]);
 
-    // And the extracted job posting content will be viewable in the Markdown Content display
     const markdownSummary = page.locator(".job-postings-expander summary", { hasText: "Markdown Content" });
     await markdownSummary.click();
     const markdownTextarea = page.locator("textarea.job-postings-markdown");
     await expect(markdownTextarea).toBeVisible();
     await expect(markdownTextarea).toHaveValue(/Senior Software Engineer/);
     await expect(markdownTextarea).toHaveValue(/Acme Corp/);
+    await expect(markdownTextarea).toHaveValue(/- Experience with TypeScript and React/);
   });
 
-  test("Scenario: Saving a captured job posting succeeds with the real server flow", async ({ page, context }) => {
-    const jobPostingUrl = "https://www.indeed.com/viewjob?jk=455de5af61ae4e7a";
-
-    await page.addInitScript(
-      ({ expectedUrl, html, text }) => {
-        window.addEventListener("message", (event) => {
-          const data = event.data;
-          if (data?.source !== "job-search-assistant-web-ui") {
-            return;
-          }
-
-          if (data.type === "OPEN_URL_VISIBLE") {
-            window.postMessage(
-              {
-                source: "job-search-assistant-extension",
-                requestId: data.requestId,
-                response: {
-                  ok: true,
-                  snapshot: { url: data.url },
-                },
-              },
-              "*",
-            );
-          } else if (data.type === "CAPTURE_TAB_BY_URL") {
-            window.postMessage(
-              {
-                source: "job-search-assistant-extension",
-                requestId: data.requestId,
-                response: {
-                  ok: true,
-                  snapshot: {
-                    title: "Senior Software Engineer - Acme Corp",
-                    url: expectedUrl,
-                    html,
-                    text,
-                  },
-                },
-              },
-              "*",
-            );
-          }
-        });
-      },
-      {
-        expectedUrl: jobPostingUrl,
-        html: `
-          <div class="jobsearch-JobComponent">
-            <div class="jobsearch-InfoHeaderContainer">
-              <h1>Senior Software Engineer</h1>
-              <div data-testid="inlineHeader-companyName"><a>Acme Corp</a></div>
-              <div data-testid="job-location">Remote</div>
-              <div data-testid="salaryInfoAndJobType"><span>$150,000 - $180,000 a year</span></div>
-            </div>
-          </div>
-        `,
-        text: "Senior Software Engineer\nAcme Corp\nRemote\n$150,000 - $180,000 a year",
-      },
+  test("Scenario: Saving a captured job posting succeeds with the real server flow", async ({ page }) => {
+    await captureJobPosting(page);
+    const savedResponse = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/v1/job-postings" && response.request().method() === "POST",
     );
-
-    await page.goto("/");
-    const urlInput = page.getByLabel("Posting URL");
-    await urlInput.fill(jobPostingUrl);
-
-    await page.getByRole("button", { name: "Go", exact: true }).click();
-    await expect(page.locator(".job-postings-status")).toContainText(`Opened ${jobPostingUrl}`);
-
-    await page.getByRole("button", { name: "Capture", exact: true }).click();
-    await expect(page.locator(".job-postings-status")).toContainText("Captured Senior Software Engineer.");
-
     await page.getByRole("button", { name: "Save", exact: true }).click();
+    const response = await savedResponse;
+    expect(response.status()).toBe(201);
+    const saved = await response.json();
 
-    await expect(page.locator(".job-postings-status")).toContainText("Saved Senior Software Engineer");
-    await expect(page.locator(".job-postings-saved-item")).toContainText("Senior Software Engineer");
-    await expect(page.locator(".job-postings-saved-item")).toContainText("Acme Corp");
+    const savedSection = page.locator("#job-postings--saved-job-postings--container");
+    await savedSection.locator("> .header > .title").click();
+    const savedPosting = savedSection.locator(`#job-postings--saved-job-postings--container--record-${saved.id}`);
+    await expect(savedPosting).toContainText("Senior Software Engineer");
+    await expect(savedPosting).toContainText("Acme Corp");
+    await page.reload();
+    await expect(savedPosting).toContainText("Senior Software Engineer");
   });
 
-  test("Scenario: Refresh loads saved job postings from the database", async ({ page }) => {
-    const savedJobPostings = [
-      {
-        id: 42,
+  test("Scenario: Refresh loads saved job postings from the database", async ({ page }, testInfo) => {
+    const seeded = await callServer({
+      page,
+      testInfo,
+      route: "job-postings",
+      method: "POST",
+      data: {
         title: "Senior Software Engineer",
         company: "Acme Corp",
         location: "Remote",
         salary: "$150,000 - $180,000 a year",
         workModel: "Remote",
         url: "https://example.com/jobs/senior-software-engineer",
-        documentId: 99,
-        createdAt: "2024-01-15T00:00:00Z",
         document: {
-          id: 99,
           title: "Senior Software Engineer",
-          type: "job-posting",
+          type: "Markdown",
           content: "# Senior Software Engineer\n\nAcme Corp",
           source: "example.com",
         },
       },
-    ];
-
-    let fetches = 0;
-
-    await page.route("**/api/v1/job-postings", async (route) => {
-      fetches += 1;
-      const responseBody = fetches === 1 ? [] : savedJobPostings;
-
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(responseBody),
-      });
     });
 
-    await page.goto("/");
-
     const savedJobPostingsContainer = page.locator("#job-postings--saved-job-postings--container");
-    await savedJobPostingsContainer.locator("summary").click();
+    await savedJobPostingsContainer.locator("> .header > .title").click();
+    await expect(savedJobPostingsContainer.locator("ul.data-list > li")).toHaveCount(0);
+    const refreshed = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/v1/job-postings" && response.request().method() === "GET",
+    );
+    await savedJobPostingsContainer.getByRole("button", { name: "Refresh records", exact: true }).click();
+    expect((await refreshed).ok()).toBeTruthy();
 
-    const refreshButton = page.locator("#job-postings--saved-job-postings--refresh-button");
-    await expect(refreshButton).toBeVisible();
-
-    await refreshButton.click();
-
-    await expect(page.locator(".job-postings-saved-item")).toHaveCount(1);
-    await expect(page.locator(".job-postings-saved-item")).toContainText("Senior Software Engineer");
-    await expect(page.locator(".job-postings-saved-item")).toContainText("Acme Corp");
-    await expect(page.locator(".job-postings-saved-item")).toContainText("Remote");
-    await expect(fetches).toBeGreaterThanOrEqual(2);
+    await expect(savedJobPostingsContainer.locator("ul.data-list > li")).toHaveCount(1);
+    const savedPosting = savedJobPostingsContainer.locator(`#job-postings--saved-job-postings--container--record-${seeded.json.id}`);
+    await expect(savedPosting).toContainText("Senior Software Engineer");
+    await expect(savedPosting).toContainText("Acme Corp");
+    await savedPosting.locator(".expander > .header > .title").click();
+    await expect(savedPosting).toContainText("Remote");
+    await expect(savedPosting).toContainText("$150,000 - $180,000 a year");
   });
 });

@@ -188,6 +188,7 @@ public sealed class Server_Route_Handler_Tests : SqliteTestBase
         var payload = new
         {
             name = "resume-screening-1",
+            aiName = "Test AI",
             aiUrl = "https://example.com/ai/resume-screening",
             jobPostingId = jobPosting.Id,
             resumeId = resume.Id,
@@ -215,6 +216,7 @@ public sealed class Server_Route_Handler_Tests : SqliteTestBase
         var responsePayload = Assert.IsType<CreatedAtRoute<AiPrompt>>(result);
         var responseValue = responsePayload.Value;
         Assert.Equal(payload.name, responseValue.Name);
+        Assert.Equal(payload.aiName, responseValue.AiName);
         Assert.Equal(payload.aiUrl, responseValue.AiUrl);
         Assert.Equal(payload.jobPostingId, responseValue.JobPostingId);
         Assert.Equal(payload.resumeId, responseValue.ResumeId);

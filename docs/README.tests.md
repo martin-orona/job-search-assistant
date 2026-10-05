@@ -17,6 +17,11 @@ Browser-driven tests must exercise the real server and database flow. To keep th
 
 See [CODING-STANDARDS.md:End to End (e2e)](<CODING-STANDARDS.md:#end-to-end-(e2e)>) for specific rules.
 
+The Job Postings tests verify that each browser flow starts with an empty real-server database.
+Server regressions also verify that endpoints retain their selected database across async calls
+and that cleaning up one flow preserves other flows. Flow IDs include a hash so the server's
+length limit cannot truncate away their uniqueness.
+
 ## Key Concepts of Gherkin
 
 Gherkin scenarios follow a **Given-When-Then** structure.
@@ -151,6 +156,20 @@ The JSA uses Sqlite as its database. It is backed up to a well known directory. 
 
     Then it copies the database from the Local Database Directory to the Cloud Backup Database Directory
 
+### Scenario: Database management - AI prompt details are preserved
+
+    Given an AI prompt has a name, AI provider name, URL, and related records
+    When the AI prompt and its documents are saved
+    Then the create response includes the AI provider name
+    And the saved AI prompt is retrieved
+    Then its name, AI provider name, URL, and related record IDs are preserved
+
+### Scenario: Database management - AI prompt update timestamp
+
+    Given an AI prompt has been saved with all required details
+    When its name is changed after the original save timestamp
+    Then its database update timestamp advances
+
 ### Scenario: Database management - daily backups
 
 The JSA has a simple strategy to be able to restore the database to an earlier point in time. It maintains a daily backup per day that the JSA runs.
@@ -226,6 +245,12 @@ The DB Viewer editor uses the domain model's enum values to present a constraine
 
 The user is able to capture and track Job Postings.
 
+Automated navigation and capture use a shared extension-bridge simulator that opens
+and reads a real browser tab containing a deterministic job posting fixture. The
+application's extraction, rendering, and server/database calls run normally. These
+tests do not verify installation or execution of the packaged browser extension,
+or availability of the live Indeed posting.
+
 ### Scenario: Navigate to the Job Postings screen
 
     Given the user is using the JSA
@@ -253,8 +278,17 @@ The user is able to capture and track Job Postings.
 
     Then the job posting will be copied from the job posting page/tab
     And the job posting page will be visible in the Job Post Page display
-    And the extracted job posting content will be viewable in the Fromatted Content display, with the original formatting, to make it easier for the user to compare the original content to the extracted content
+    And the extracted job posting content will be viewable in the Formatted Content display, with the original formatting, to make it easier for the user to compare the original content to the extracted content
     And the extracted job posting content will be viewable in the Markdown Content display, in markdown format, to be easy to handle as text data
+
+### Scenario: Save a captured job posting
+
+    Given the user has captured a job posting on the Job Postings screen
+    When the user clicks Save
+    Then the server creates the posting and its document in the test flow database
+    And the Saved Job Postings section displays its title and company
+    When the user reloads the page
+    Then the saved posting is still displayed
 
 ### Scenario: Refresh Job Postings list
 
@@ -312,7 +346,8 @@ The job searcher at some point has to apply to open positions to get a job.
 
     Then the Saved Applications expander label is visible
     And the saved applications list is collapsed by default
-    And the list displays the empty state message: "No saved job applications yet."
+    When the user expands the Saved Applications section
+    Then the section displays the empty state message: "No saved job applications yet."
 
 ### Scenario: Saved Applications expander loads saved job applications from the real server
 
@@ -325,6 +360,62 @@ The job searcher at some point has to apply to open positions to get a job.
     Then the saved job applications list becomes visible
     And the list displays the company name, role title, and current status for each saved application
     And the data reflects the real server record, not an earlier shared database state
+
+### Scenario: Saved Applications displays an applied date without timezone drift
+
+    Given a saved application has an applied date of "2026-09-15"
+    And the browser uses the America/Los_Angeles timezone and en-US locale
+    When the user expands that application in the Saved Applications section
+    Then its applied date is displayed as "Sep 15, 2026"
+    When the user opens its editor
+    Then the Applied On date input contains "2026-09-15"
+
+### Scenario: The saved application editor appears inline with the matching record
+
+    Given the Saved Applications section contains two applications
+    When the user clicks Edit for one application
+    Then that application's editor replaces its display within the same record row
+    And the other application remains in display mode
+
+### Scenario: The saved application editor uses shared form controls
+
+    Given the user opens a saved application's editor
+    Then the editor uses the shared entity-editor styling
+    And its Id is read-only
+    And its company, role, applied date, status, and related record ID fields are visible
+    And Status is a dropdown with all allowed application statuses
+    And its selected status matches the saved record
+    And Save uses the primary button styling
+
+### Scenario: The saved application editor displays its linked records
+
+    Given a saved application references a job source and job posting
+    When the user opens that application's editor
+    Then the source name is displayed beneath its Source Id field
+    And the job posting is displayed beneath its Job Posting Id field
+    And the linked displays have no Edit or Delete buttons
+
+### Scenario: Editing a saved application persists only the changed fields
+
+    Given the user opens a saved application's editor
+    When the user changes its company and clicks Save
+    Then the PATCH request contains only the changed company
+    And unchanged linked records and server-generated timestamps are not submitted
+    And the editor closes after a successful save
+    And the saved row displays the changed company
+    When the user reloads the page and opens Saved Applications
+    Then the changed company is still displayed
+
+### Scenario: Partial updates preserve IDs for changed linked records
+
+    Given an editable record is cloned from a saved record
+    When a partial update is computed without changing any values
+    Then the partial update is empty
+    When a linked record's name changes
+    Then the partial update includes only that linked record's Id and changed name
+    And its unchanged server-generated timestamps are omitted
+    When a note is also changed
+    Then the changed notes list is included in the partial update
 
 ### Scenario Outline: Saved Applications use the per-test database flow
 
@@ -350,6 +441,25 @@ The job searcher at some point has to apply to open positions to get a job.
     <summary>expand to see details</summary>
 
 The Database Viewer allows the User to view the various tables in the database and edit them if need be.
+
+### Scenario: Adding an existing question pair to an application persists its shared reference
+
+    Given a saved question with question "fdsa" and answer "asdf"
+    And a saved Job Application without questions
+    And the user is editing that application in the DB Viewer
+
+    When the user adds question "fdsa" and answer "asdf"
+    And the user saves the application
+
+    Then the save succeeds even when questions are the only changed field
+    And the application displays the saved question and answer after refresh
+    And the existing question is reused without creating a duplicate
+    And the question displays a Referenced By link to the application
+
+    Question rows and application-question links are saved in the same transaction.
+    Repeating a save does not duplicate links. Removing a question from an application
+    removes only its link, preserving the shared question. An invalid question rolls
+    back all changes to the application, questions, and links.
 
 ### Scenario: Navigate to the DB Viewer screen
 
@@ -458,10 +568,11 @@ The records are taking up a lot of visual space. When there are many records, it
     | Resume | AI Prompt |
     | AI Prompt Template | AI Prompt |
     | Job Source | Job Application |
-    | Job Application | Job Question |
+    | Job Question | Job Application |
 
     A target record may legitimately have more than one incoming reference type.
     For example, a Job Posting may be referenced by both AI Prompt and Job Application records.
+    Job Applications reference saved questions through their Questions collection; questions do not contain a JobApplicationId field.
 
 ### Scenario Outline: Entity lists can refresh data
 

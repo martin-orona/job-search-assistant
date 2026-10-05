@@ -71,4 +71,37 @@ public sealed class FileLifecycleManagerTests : SqliteTestBase
         Assert.False(File.Exists(newerSameDayBackup));
         Assert.True(File.Exists(previousDayBackup));
     }
+
+    [Fact]
+    public void CreateDailyBackupSnapshot_WithTestFlow_PreservesCloudAndOtherFlowBackups()
+    {
+        var cloudBackup = Path.Combine(FileLifecycleManager.CloudFolder, "JobSearchAssistant.db.2024-09-14T08-00-00Z");
+        File.WriteAllText(cloudBackup, "real backup");
+        var timestamp = new DateTime(2024, 9, 14, 10, 15, 0, DateTimeKind.Utc);
+        try
+        {
+            FileLifecycleManager.SetTestDatabase("snapshot-first");
+            File.WriteAllText(FileLifecycleManager.LocalDbPath, "first flow");
+            var firstBackup = FileLifecycleManager.CreateDailyBackupSnapshot(timestamp);
+            Assert.StartsWith(FileLifecycleManager.GetTestDatabaseFolder("snapshot-first"), firstBackup);
+            Assert.Single(FileLifecycleManager.GetDailyBackupSnapshots());
+
+            FileLifecycleManager.SetTestDatabase("snapshot-second");
+            File.WriteAllText(FileLifecycleManager.LocalDbPath, "second flow");
+            Assert.Empty(FileLifecycleManager.GetDailyBackupSnapshots());
+            var secondBackup = FileLifecycleManager.CreateDailyBackupSnapshot(timestamp);
+            Assert.NotEqual(firstBackup, secondBackup);
+            Assert.Equal("first flow", File.ReadAllText(firstBackup));
+            Assert.Equal("real backup", File.ReadAllText(cloudBackup));
+
+            FileLifecycleManager.DeleteTestDatabase("snapshot-second");
+            Assert.False(File.Exists(secondBackup));
+            Assert.True(File.Exists(firstBackup));
+        }
+        finally
+        {
+            FileLifecycleManager.ClearTestDatabase();
+        }
+        Assert.Equal([Path.GetFileName(cloudBackup)], FileLifecycleManager.GetDailyBackupSnapshots());
+    }
 }

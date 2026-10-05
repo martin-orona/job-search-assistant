@@ -16,6 +16,9 @@ public class Database
 
         SqlMapper.AddTypeHandler(new DateTimeOffsetTypeHandler());
         SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
+        SqlMapper.AddTypeHandler(new JsonListTypeHandler<PointOfContact>());
+        SqlMapper.AddTypeHandler(new JsonListTypeHandler<JobQuestion>());
+        SqlMapper.AddTypeHandler(new JsonListTypeHandler<Note>());
         SqlMapper.AddTypeHandler(new EnumTypeHandler<DocumentType>());
         SqlMapper.AddTypeHandler(new EnumTypeHandler<WorkModel>());
         SqlMapper.AddTypeHandler(new EnumTypeHandler<ApplicationStatus>());

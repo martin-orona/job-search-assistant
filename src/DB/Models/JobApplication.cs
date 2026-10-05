@@ -17,15 +17,17 @@ public class JobApplication : Model
     [Required]
     public ApplicationStatus Status { get; set; } = ApplicationStatus.Unknown;
 
+    public List<PointOfContact> PointsOfContact { get; set; } = new List<PointOfContact>();
+
+    public List<JobQuestion> Questions { get; set; } = new List<JobQuestion>();
+
+    public List<Note> Notes { get; set; } = new List<Note>();
+
     [RequireOneWhenCreating(nameof(Source), nameof(SourceId))]
     public JobSource? Source { get; set; }
 
     [RequiredWhenUpdating]
     public int SourceId { get; set; }
-
-    public List<JobQuestion> Questions { get; set; } = new List<JobQuestion>();
-
-    public List<PointOfContact> PointsOfContact { get; set; } = new List<PointOfContact>();
 
     [RequireOneWhenCreating(nameof(JobPosting), nameof(JobPostingId))]
     public JobPosting? JobPosting { get; set; }
@@ -45,12 +47,11 @@ public class JobApplication : Model
 
     public int? AiPromptId { get; set; }
 
-    public List<Note> Notes { get; set; } = new List<Note>();
 }
 
 public record Note(DateOnly date, string content);
 
-public record PointOfContact(string name, string email, string role, string? phone);
+public record PointOfContact(string role, string name, string? email, string? phone);
 
 /// <summary>
 /// Represents the status of a job application.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SavedJobPostingSummary } from "../App";
+import type { AiPrompt } from "./AiPrompt";
 
 type SavedPromptTemplate = {
   id: number;
@@ -34,6 +35,7 @@ type SavedResume = {
 type SavedAiPrompt = {
   id: number;
   name: string;
+  aiName: string;
   aiUrl: string;
   jobPostingId: number;
   resumeId: number;
@@ -557,6 +559,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
         },
       }),
     });
+
     if (!response.ok) {
       const errorBody = await response.text();
       const detail = errorBody || "No server details provided.";
@@ -564,30 +567,13 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
       return;
     }
 
-    const saved = (await response.json()) as {
-      id: number;
-      name: string;
-      aiUrl: string;
-      jobPostingId: number;
-      resumeId: number;
-      aiPromptTemplateId: number;
-      promptDocumentId: number;
-      responseDocumentId: number;
-      createdAt: string;
-      updatedAt: string;
-      promptContent: string;
-      responseContent: string;
-      jobPostingContent: string;
-      resumeContent: string;
-      jobPostingWorkModel: string;
-      jobPostingSalary: string;
-      resumeJobTitle: string;
-      resumeDate: string;
-    };
+    const saved = (await response.json()) as AiPrompt;
 
     setSavedAiPrompts((current) => [
       {
         ...saved,
+        promptContent: saved.promptDocument?.content ?? "",
+        responseContent: saved.responseDocument?.content ?? "",
         jobPostingTitle: jobPosting.title,
         jobPostingCompany: jobPosting.company,
         resumeName,

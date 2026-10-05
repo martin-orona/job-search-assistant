@@ -35,10 +35,14 @@ public static class FileLifecycleManager
 
     private static string CloudDbPath => Path.Combine(CloudFolder, DbFileName);
 
+    private static string BackupFolder => string.IsNullOrWhiteSpace(ActiveTestFlowId.Value)
+        ? CloudFolder
+        : Path.Combine(GetTestDatabaseFolder(ActiveTestFlowId.Value), "Backups");
+
     public static string GetTestDatabaseFolder(string flowId)
     {
         var safeId = SanitizeTestFlowId(flowId);
-        return Path.Combine(LocalTestDbFolder, $"{TestDatabasePrefix}{safeId}");
+        return Path.Combine(LocalTestDbFolder, "tests", $"{TestDatabasePrefix}{safeId}");
     }
 
     public static void SetTestDatabase(string flowId)
@@ -131,6 +135,8 @@ public static class FileLifecycleManager
                 ?? string.Empty;
             if (folderName.StartsWith(TestDatabasePrefix, StringComparison.OrdinalIgnoreCase))
             {
+                var databasePath = Path.Combine(directory, DbFileName);
+                CloseConnectionsForDatabase(databasePath);
                 DeleteFolderWithRetry(directory);
             }
         }
@@ -164,14 +170,15 @@ public static class FileLifecycleManager
             throw new FileNotFoundException("The database has not been created locally yet.", LocalDbPath);
         }
 
-        Directory.CreateDirectory(CloudFolder);
+        var backupFolder = BackupFolder;
+        Directory.CreateDirectory(backupFolder);
 
         var snapshotTime = timestampUtc ?? DateTime.UtcNow;
         var snapshotName = $"{DbFileName}.{snapshotTime:yyyy-MM-ddTHH-mm-ssZ}";
-        var snapshotPath = Path.Combine(CloudFolder, snapshotName);
+        var snapshotPath = Path.Combine(backupFolder, snapshotName);
         var backupPrefix = DbFileName + ".";
 
-        foreach (var existingBackup in Directory.EnumerateFiles(CloudFolder, "*.*", SearchOption.TopDirectoryOnly))
+        foreach (var existingBackup in Directory.EnumerateFiles(backupFolder, "*.*", SearchOption.TopDirectoryOnly))
         {
             var existingName = Path.GetFileName(existingBackup);
             if (string.IsNullOrWhiteSpace(existingName) || !existingName.StartsWith(backupPrefix, StringComparison.OrdinalIgnoreCase))
@@ -203,12 +210,13 @@ public static class FileLifecycleManager
 
     public static List<string> GetDailyBackupSnapshots()
     {
-        if (!Directory.Exists(CloudFolder))
+        var backupFolder = BackupFolder;
+        if (!Directory.Exists(backupFolder))
         {
             return [];
         }
 
-        return Directory.EnumerateFiles(CloudFolder, "*", SearchOption.TopDirectoryOnly)
+        return Directory.EnumerateFiles(backupFolder, "*", SearchOption.TopDirectoryOnly)
             .Select(file => Path.GetFileName(file) ?? file)
             .Where(name => name.StartsWith("JobSearchAssistant.db.", StringComparison.OrdinalIgnoreCase))
             .Where(name => DateTime.TryParseExact(

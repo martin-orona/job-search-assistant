@@ -1,15 +1,21 @@
 namespace JobSearchAssistant.Server;
 
 using System;
-using System.Net.Http;
 using System.Text.Json.Serialization;
+using System.Threading;
+
+using JobSearchAssistant.DB;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-using JobSearchAssistant.DB;
+using Serilog;
+using Serilog.Context;
+using Serilog.Core;
+using Serilog.Events;
+using Serilog.Sinks.SystemConsole.Themes;
 
 public class Program
 {
@@ -17,17 +23,45 @@ public class Program
 
     internal static bool IsInDevMode { get; private set; } = false;
 
-    private static readonly HttpClient HttpClient = new HttpClient();
-
     public static void Main(string[] args)
     {
-        var settings = Core.Configuration.LoadAppSettings("appsettings.json");
+        try
+        {
+            InitializeLogging();
+            InitializeTheDatabase();
+            var app = InitializeWebApplication(args);
+            InitializeRoutes(app);
 
-        Database.Startup(settings);
-        Database.RunMigrations();
-        FileLifecycleManager.CleanupStaleTestDatabases();
+            Log.Information("Web service running. Open {URL} in your browser.", "http://localhost:5000/index.html");
+            app.Run("http://localhost:5000");
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Application startup failed.");
+            throw;
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
+    }
 
+    internal static bool IsInDevelopmentMode(WebApplication app)
+    {
+        string coreEnv = app.Environment.EnvironmentName ?? "Unknown";
+        string appMode = app.Configuration["APP_MODE"] ?? Environment.GetEnvironmentVariable("APP_MODE") ?? "Unknown";
+
+        var testEnvs = new[] { "Testing", "Test", "Development", "Dev" };
+        bool isDevEnvironment = testEnvs.Contains(appMode) || testEnvs.Contains(coreEnv);
+
+        return isDevEnvironment;
+    }
+
+    private static WebApplication InitializeWebApplication(string[] args)
+    {
         var builder = WebApplication.CreateBuilder(args);
+
+        builder.Host.UseSerilog();
 
         builder.Services.Configure<JsonOptions>(options =>
         {
@@ -39,30 +73,76 @@ public class Program
 
         var app = builder.Build();
 
-        IsInDevMode = IsInDevevelopmentMode(app);
+        app.Use(async (context, next) =>
+        {
+            // The correlation ID will cover all logs within this request's context
+            var correlationId = LogCounters.CorrelationId.Next().ToString();
+            context.Items["CorrelationId"] = correlationId;
+            context.Response.Headers["X-Correlation-ID"] = correlationId;
 
-        if (builder.Environment.IsDevelopment())
+            using (LogContext.PushProperty("CorrelationId", correlationId))
+            {
+                var logger = context.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("RequestLifecycle");
+
+                string barrier = new string('=', 40);
+                logger.LogInformation(barrier);
+                logger.LogInformation(barrier);
+                logger.LogInformation(
+                    $"BEGIN {context.Request.Protocol}" + " {Method} {URL}",
+                    context.Request.Method,
+                    $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}");
+
+                await next();
+
+                logger.LogInformation(
+                    $"END {context.Request.Protocol}" + " {Method} {URL}",
+                    context.Request.Method,
+                    $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}");
+                logger.LogInformation(barrier);
+                logger.LogInformation(barrier);
+            }
+        });
+
+        IsInDevMode = IsInDevelopmentMode(app);
+
+        if (IsInDevMode)
         {
             app.UseDeveloperExceptionPage();
         }
 
-        app.Use(async (context, next) =>
+        if (IsInDevMode)
         {
-            Console.WriteLine($"[TEST] processing request {context.Request.Method} {context.Request.Path}");
-
-            // log out the headers for debugging purposes
-            foreach (var header in context.Request.Headers)
+            app.Use(async (context, next) =>
             {
-                Console.WriteLine($"[TEST] Header: {header.Key} = {header.Value}");
-            }
+                var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
 
-            await TestDatabaseFlow.ApplyAsync(context, app.Environment);
-            await next();
-        });
+                logger.LogInformation($"[TEST] processing request {context.Request.Method} {context.Request.Path}");
+
+                /*  // log out the headers for debugging purposes
+                    foreach (var header in context.Request.Headers)
+                    {
+                        logger.LogInformation($"[TEST] Header: {header.Key} = {header.Value}");
+                    } */
+
+                await TestDatabaseFlow.InvokeAsync(context, app.Environment, () => next());
+            });
+        }
 
         app.UseStaticFiles();
         app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 
+        app.Lifetime.ApplicationStopping.Register(() =>
+        {
+            Database.Shutdown();
+        });
+
+        return app;
+    }
+
+    private static void InitializeRoutes(WebApplication app)
+    {
         app.MapGet("/", () => "hello world");
         var api = app.MapGroup(RoutePrefix_APIv1);
         var admin = Admin.Map(api, app);
@@ -74,24 +154,48 @@ public class Program
         var aiPromptTemplates = new AiPromptTemplates().Map(api);
         var resumes = new Resumes().Map(api);
         var aiPrompts = new AiPrompts().Map(api);
-
-        app.Lifetime.ApplicationStopping.Register(() =>
-       {
-           Database.Shutdown();
-       });
-
-        Console.WriteLine("\n[Server] Web service running. Open http://localhost:5000/index.html in your browser.");
-        app.Run("http://localhost:5000");
     }
 
-    internal static bool IsInDevevelopmentMode(WebApplication app)
+    private static void InitializeLogging() => Log.Logger = new LoggerConfiguration()
+        .Enrich.FromLogContext()
+        .Enrich.With(new SequentialLogEntryIdEnricher())
+        .WriteTo.Console(
+            outputTemplate: "[{Timestamp:HH:mm:ss} {CorrelationId}:{LogEntryId} {Level:w3}] {Message:lj}{NewLine}{Exception}",
+            theme: AnsiConsoleTheme.Sixteen
+        )
+        .CreateLogger();
+
+    private static void InitializeTheDatabase()
     {
-        string coreEnv = app.Environment.EnvironmentName ?? "Unknown";
-        string appMode = app.Configuration["APP_MODE"] ?? Environment.GetEnvironmentVariable("APP_MODE") ?? "Unknown";
+        var settings = Core.Configuration.LoadAppSettings("appsettings.json");
 
-        var testEnvs = new[] { "Testing", "Test", "Development", "Dev" };
-        bool isDevEnvironment = testEnvs.Contains(appMode) || testEnvs.Contains(coreEnv);
+        Database.Startup(settings);
+        Database.RunMigrations();
+        FileLifecycleManager.CleanupStaleTestDatabases();
+    }
+}
 
-        return isDevEnvironment;
+public sealed class AtomicCounter
+{
+    private long _value = 0;
+
+    /* NOTE: If this ever gets scaled horizontally across multiple instances,
+    this sequential correlation ID will not be unique across instances. */
+    public long Next() => Interlocked.Increment(ref _value);
+}
+
+public static class LogCounters
+{
+    public static readonly AtomicCounter LogEntryId = new AtomicCounter();
+    public static readonly AtomicCounter CorrelationId = new AtomicCounter();
+}
+
+public class SequentialLogEntryIdEnricher : ILogEventEnricher
+{
+    public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
+    {
+        var id = LogCounters.LogEntryId.Next();
+        var property = propertyFactory.CreateProperty("LogEntryId", id);
+        logEvent.AddPropertyIfAbsent(property);
     }
 }

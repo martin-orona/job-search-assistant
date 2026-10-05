@@ -3,7 +3,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 48px 24px;
+  padding: 0 1.5rem 1.5rem 1.5rem;
   box-sizing: border-box;
 }
 
@@ -90,8 +90,9 @@
   flex: 1;
   min-width: 0;
   padding: 8px 12px;
-  border: 1px solid var(--border);
+  border: var(--control-border);
   border-radius: 8px;
+  border-radius: var(--control-radius);
   font: inherit;
   color: var(--text-h);
   background: var(--bg);
@@ -99,10 +100,10 @@
 
 /* Shared Button Utility Classes */
 .button {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: var(--control-border);
+  border-radius: var(--control-radius);
   background: transparent;
-  color: var(--text);
+  color: var(--color-text);
   padding: 6px 12px;
   cursor: pointer;
   font: inherit;
@@ -166,12 +167,6 @@
 }
 
 .card-actions .button {
-  padding: 4px 8px;
-  font-size: 12px;
-}
-
-.expander-summary-button {
-  margin-left: auto;
   padding: 4px 8px;
   font-size: 12px;
 }
@@ -302,6 +297,66 @@
 .db-viewer {
   display: grid;
   gap: 16px;
+}
+
+.db-viewer > .data-lists > .failed-grid-attempt {
+  /* 1. Define the 16-column grid with named lines on the container */
+  .db-viewer > .data-lists {
+    display: grid;
+    grid-template-columns:
+      [expander-open-start expander-closed-start section-title-start] repeat(10, 1fr)
+      [section-title-end record-count-open-start record-count-closed-start]
+      repeat(5, 1fr) [expander-closed-end record-count-open-end refresh-button-start]
+      1fr [expander-open-end record-count-closed-end refresh-button-end];
+    gap: 0;
+  }
+
+  .actionable-expander.container {
+    display: contents;
+  }
+
+  /* Details container assignments */
+  details.expander {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: expander-closed; /* 1 - 15 */
+  }
+
+  details.expander[open] {
+    grid-column: expander-open; /* 1 - 16 */
+  }
+
+  /* Propagation */
+  details.expander summary,
+  details.expander .header {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+  }
+
+  /* Header items assignments */
+  .header .title {
+    grid-column: section-title; /* 1 - 10 */
+  }
+
+  /* The count changes named column assignment based on the open state */
+  .header .count {
+    grid-column: record-count-closed; /* 11 - 16 */
+  }
+
+  details.expander[open] .header .count {
+    grid-column: record-count-open; /* 11 - 15 */
+  }
+
+  /* Actions button assignment */
+  .actionable-expander.actions {
+    grid-column: refresh-button; /* 16 */
+    display: flex;
+  }
+}
+
+details.expander[open] + .actionable-expander.actions {
+  display: none;
 }
 
 .db-viewer-entity {

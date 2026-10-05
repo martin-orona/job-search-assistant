@@ -10,6 +10,9 @@ public class AiPrompt : Model
     public string Name { get; set; } = string.Empty;
 
     [Required]
+    public string AiName { get; set; } = string.Empty;
+
+    [Required]
     public string AiUrl { get; set; } = string.Empty;
 
     [RequireOneWhenCreating(nameof(JobPosting), nameof(JobPostingId))]

@@ -80,6 +80,7 @@ public sealed class ai_prompt_table_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "resume-match",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/resume-match",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,
@@ -106,6 +107,7 @@ public sealed class ai_prompt_table_Tests : SqliteTestBase
 
         Assert.NotNull(fetched);
         Assert.Equal("resume-match", fetched!.Name);
+        Assert.Equal("Test AI", fetched.AiName);
         Assert.Equal("https://example.com/ai/resume-match", fetched.AiUrl);
         Assert.Equal(jobPosting.Id, fetched.JobPostingId);
         Assert.Equal(resume.Id, fetched.ResumeId);
@@ -168,6 +170,7 @@ public sealed class ai_prompt_table_Tests : SqliteTestBase
         var created = await new AiPrompts().Create(new AiPrompt
         {
             Name = "initial-name",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/initial",
             JobPostingId = jobPosting.Id,
             ResumeId = resume.Id,

@@ -18,6 +18,29 @@ public static class TestDatabaseFlow
     private const string CleanupCookieName = "jsa_test_cleanup";
     private static readonly SemaphoreSlim DatabaseFlowLock = new(1, 1);
 
+    public static async Task InvokeAsync(HttpContext context, IHostEnvironment environment, Func<Task> next)
+    {
+        ArgumentNullException.ThrowIfNull(next);
+        await ApplyAsync(context, environment);
+
+        var flowId = ReadValue(context, FlowHeaderName, FlowCookieName);
+        FileLifecycleManager.ClearTestDatabase();
+        if (!string.IsNullOrWhiteSpace(flowId) && !IsCleanupRequested(context)
+            && !context.Request.Path.StartsWithSegments($"{Program.RoutePrefix_APIv1}/admin/clean-test-db"))
+        {
+            FileLifecycleManager.SetTestDatabase(flowId);
+        }
+
+        try
+        {
+            await next();
+        }
+        finally
+        {
+            FileLifecycleManager.ClearTestDatabase();
+        }
+    }
+
     public static async Task ApplyAsync(HttpContext context, IHostEnvironment environment)
     {
         // don't do anything if route /admin/clean-test-db is called
@@ -29,9 +52,13 @@ public static class TestDatabaseFlow
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
 
+        var flowId = ReadValue(context, FlowHeaderName, FlowCookieName);
+        var cleanup = IsCleanupRequested(context);
+        var isExplicitTestRequest = !string.IsNullOrWhiteSpace(flowId) || cleanup;
         var isTestAwareEnvironment = environment.IsDevelopment()
             || environment.IsEnvironment("Testing")
-            || environment.IsEnvironment("Test");
+            || environment.IsEnvironment("Test")
+            || isExplicitTestRequest;
 
         if (!isTestAwareEnvironment)
         {
@@ -43,22 +70,20 @@ public static class TestDatabaseFlow
             return;
         }
 
-        var flowId = ReadValue(context, FlowHeaderName, FlowCookieName);
-        var cleanup = IsCleanupRequested(context);
-
         if (cleanup)
         {
             Console.WriteLine($"[TEST] detected flow ID: {flowId}");
             Console.WriteLine($"[TEST] cleanup requested: {cleanup}");
             await RunWithWriteLockAsync(() =>
             {
+                FileLifecycleManager.ClearTestDatabase();
                 if (!string.IsNullOrWhiteSpace(flowId))
                 {
                     FileLifecycleManager.DeleteTestDatabase(flowId);
                 }
                 else
                 {
-                    FileLifecycleManager.ClearTestDatabase();
+                    FileLifecycleManager.CleanupStaleTestDatabases();
                 }
 
                 return Task.CompletedTask;
@@ -79,6 +104,7 @@ public static class TestDatabaseFlow
         await RunWithWriteLockAsync(() =>
         {
             Console.WriteLine($"[TEST] setting up test database for flow ID: {flowId}");
+            FileLifecycleManager.ClearTestDatabase();
             FileLifecycleManager.SetTestDatabase(flowId);
             var databasePath = Path.Combine(FileLifecycleManager.GetTestDatabaseFolder(flowId), "JobSearchAssistant.db");
             if (!File.Exists(databasePath))
@@ -96,30 +122,34 @@ public static class TestDatabaseFlow
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(environment);
 
+        var flowId = ReadValue(context, FlowHeaderName, FlowCookieName);
+        var cleanup = IsCleanupRequested(context);
+        var isExplicitTestRequest = !string.IsNullOrWhiteSpace(flowId) || cleanup;
         var isTestAwareEnvironment = environment.IsDevelopment()
             || environment.IsEnvironment("Testing")
-            || environment.IsEnvironment("Test");
+            || environment.IsEnvironment("Test")
+            || isExplicitTestRequest;
         if (!isTestAwareEnvironment)
         {
             return TypedResults.BadRequest("Test database operations are only allowed in development or test environments.");
         }
-
-        var flowId = ReadValue(context, FlowHeaderName, FlowCookieName);
-        if (string.IsNullOrWhiteSpace(flowId))
-        {
-            return TypedResults.BadRequest("Test workflow header/cookie is not set.");
-        }
-
-        var cleanup = IsCleanupRequested(context);
         if (!cleanup)
         {
             return TypedResults.BadRequest("Cleanup header/cookie is not set.");
         }
 
-        Console.WriteLine($"[TEST] detected flow ID: {flowId}");
+        Console.WriteLine($"[TEST] detected flow ID: {flowId ?? "<none>"}");
         Console.WriteLine($"[TEST] cleanup requested: {cleanup}");
         return await RunWithWriteLockAsync(() =>
         {
+            FileLifecycleManager.ClearTestDatabase();
+
+            if (string.IsNullOrWhiteSpace(flowId))
+            {
+                FileLifecycleManager.CleanupStaleTestDatabases();
+                return Task.FromResult(TypedResults.Ok());
+            }
+
             FileLifecycleManager.DeleteTestDatabase(flowId);
             return Task.FromResult(TypedResults.Ok());
         });

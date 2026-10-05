@@ -11,6 +11,7 @@ create table if not exists ai_prompt (
     created_at datetime not null default CURRENT_TIMESTAMP,
     updated_at datetime not null default CURRENT_TIMESTAMP,
     name text not null,
+    ai_name text not null,
     ai_url text not null,
     job_posting_id integer not null,
     resume_id integer not null,

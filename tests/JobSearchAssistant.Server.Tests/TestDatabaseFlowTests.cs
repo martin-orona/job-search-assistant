@@ -40,6 +40,30 @@ public sealed class TestDatabaseFlowTests : SqliteTestBase
     }
 
     [Fact]
+    public async Task InvokeAsync_EndpointUsesFlowDatabase_AfterAsyncInitialization()
+    {
+        RunMigrations();
+        const string flowId = "job-postings-endpoint-isolation";
+        var originalPath = FileLifecycleManager.LocalDbPath;
+        var context = new DefaultHttpContext();
+        context.Request.Headers[TestDatabaseFlow.FlowHeaderName] = flowId;
+
+        await TestDatabaseFlow.InvokeAsync(context, new TestEnvironment(), EndpointAsync);
+
+        Assert.Equal(originalPath, FileLifecycleManager.LocalDbPath);
+
+        async Task EndpointAsync()
+        {
+            await Task.Yield();
+            Assert.Equal(
+                Path.Combine(FileLifecycleManager.GetTestDatabaseFolder(flowId), "JobSearchAssistant.db"),
+                FileLifecycleManager.LocalDbPath);
+            using var connection = Database.Connect();
+            Assert.Equal(FileLifecycleManager.LocalDbPath, connection.DataSource);
+        }
+    }
+
+    [Fact]
     public async Task ApplyAsync_UsesSingleInitializationLock_ForConcurrentRequests()
     {
         RunMigrations();
@@ -66,6 +90,27 @@ public sealed class TestDatabaseFlowTests : SqliteTestBase
         await TestDatabaseFlow.ApplyAsync(cleanupContext, new TestEnvironment());
 
         Assert.False(Directory.Exists(flowLocalFolder));
+    }
+
+    [Fact]
+    public async Task CleanTestDb_WithFlowId_PreservesOtherFlowDatabases()
+    {
+        const string targetFlow = "job-postings-cleanup-target";
+        const string otherFlow = "job-postings-cleanup-other";
+        foreach (var flowId in new[] { targetFlow, otherFlow })
+        {
+            var request = new DefaultHttpContext();
+            request.Request.Headers[TestDatabaseFlow.FlowHeaderName] = flowId;
+            await TestDatabaseFlow.ApplyAsync(request, new TestEnvironment());
+        }
+
+        var cleanup = new DefaultHttpContext();
+        cleanup.Request.Headers[TestDatabaseFlow.FlowHeaderName] = targetFlow;
+        cleanup.Request.Headers[TestDatabaseFlow.CleanupHeaderName] = "true";
+        await TestDatabaseFlow.CleanTestDb(cleanup, new TestEnvironment());
+
+        Assert.False(Directory.Exists(FileLifecycleManager.GetTestDatabaseFolder(targetFlow)));
+        Assert.True(File.Exists(Path.Combine(FileLifecycleManager.GetTestDatabaseFolder(otherFlow), "JobSearchAssistant.db")));
     }
 
     [Fact]

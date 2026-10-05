@@ -14,6 +14,10 @@ create table if not exists job_application (
     role text not null,
     applied_on_date text,
     status text not null default 'Unknown',
+    -- Store JSONB as a BLOB, and validate that it's structurally real JSON
+    points_of_contact BLOB CHECK (json_valid(points_of_contact)),
+    questions BLOB CHECK (json_valid(questions)),
+    notes BLOB CHECK (json_valid(notes)),
     source_id integer not null,
     job_posting_id integer not null,
     resume_id integer,

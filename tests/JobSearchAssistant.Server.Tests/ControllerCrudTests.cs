@@ -583,6 +583,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var created = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
         {
             Name = "deep-list-prompt",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/deep-list",
             JobPostingId = dependencies.jobPosting.Id,
             ResumeId = dependencies.resume.Id,
@@ -645,6 +646,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var created = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
         {
             Name = "before-update",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/before-update",
             JobPostingId = dependencies.jobPosting.Id,
             ResumeId = dependencies.resume.Id,
@@ -657,6 +659,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var context = CreateJsonHttpContext(new
         {
             name = "after-update",
+            aiName = "Test AI",
             aiUrl = "https://example.com/ai/after-update",
             jobPostingId = created.JobPostingId,
             resumeId = created.ResumeId,
@@ -692,6 +695,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var created = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
         {
             Name = "before-patch",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/before-patch",
             JobPostingId = dependencies.jobPosting.Id,
             ResumeId = dependencies.resume.Id,
@@ -733,6 +737,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var created = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
         {
             Name = "delete-me",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/delete-me",
             JobPostingId = dependencies.jobPosting.Id,
             ResumeId = dependencies.resume.Id,
@@ -765,6 +770,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var created = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
         {
             Name = "delete-with-related",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/delete-with-related",
             JobPostingId = dependencies.jobPosting.Id,
             ResumeId = dependencies.resume.Id,
@@ -825,6 +831,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var prompt = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
         {
             Name = "blocking prompt",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/blocking",
             JobPostingId = target.Id,
             ResumeId = dependencies.resume.Id,
@@ -879,6 +886,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var targetPrompt = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
         {
             Name = "target prompt to delete",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/target-delete",
             JobPostingId = sharedJobPosting.Id,
             ResumeId = dependencies.resume.Id,
@@ -891,6 +899,7 @@ public sealed class AiPrompts_Controller_Tests : SqliteTestBase
         var blockerPrompt = await new global::JobSearchAssistant.DB.Services.AiPrompts().Create(new AiPrompt
         {
             Name = "other prompt still referencing shared posting",
+            AiName = "Test AI",
             AiUrl = "https://example.com/ai/blocker-delete",
             JobPostingId = sharedJobPosting.Id,
             ResumeId = dependencies.resume.Id,
