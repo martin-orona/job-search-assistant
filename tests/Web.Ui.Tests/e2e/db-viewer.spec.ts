@@ -355,6 +355,7 @@ namespace DbViewer {
     test.describe("Scenario Outline: Entity deletion can be confirmed or cancelled", () => {
       for (const entity of [
         { name: "Job Posting", route: "job-postings" },
+        { name: "Job Application", route: "job-applications" },
         { name: "Resume", route: "resumes" },
         { name: "AI Prompt Template", route: "ai-prompt-templates" },
       ]) {
@@ -372,9 +373,12 @@ namespace DbViewer {
             await row.getByRole("button", { name: "Delete", exact: true }).first().click();
             const dialog = page.locator(`#db-viewer--${entity.route}--delete-dialog`);
             await expect(dialog).toBeVisible();
+            const display = row.locator(".expander.entity-display").first();
+            await expect(display).toHaveClass(/\bbeing-deleted\b/);
             if (cancel) {
               await page.locator(`#db-viewer--${entity.route}--delete-cancel-button`).click();
               await expect(row).toBeVisible();
+              await expect(display).not.toHaveClass(/\bbeing-deleted\b/);
             } else {
               const deleted = page.waitForResponse((response) =>
                 response.request().method() === "DELETE" && new URL(response.url()).pathname === `/api/v1/${entity.route}/${id}`);
@@ -388,10 +392,13 @@ namespace DbViewer {
               headers: getTestHeaders(testInfo),
             });
             expect(stored.status()).toBe(cancel ? 200 : 404);
-            const document = await page.request.get(`http://localhost:5000/api/v1/documents/${config.seeds.primary.created!.documentId}`, {
-              headers: getTestHeaders(testInfo),
-            });
-            expect(document.status()).toBe(cancel ? 200 : 404);
+            const documentId = config.seeds.primary.created!.documentId;
+            if (documentId) {
+              const document = await page.request.get(`http://localhost:5000/api/v1/documents/${documentId}`, {
+                headers: getTestHeaders(testInfo),
+              });
+              expect(document.status()).toBe(cancel ? 200 : 404);
+            }
           });
         }
       }

@@ -50,6 +50,7 @@ export type EntityUiProps = {
 
 export type EntityExpansionProps = {
   open?: boolean;
+  additionalActions?: React.ReactNode;
   onExpanded?: (event: React.SyntheticEvent<Element>) => void;
   onCollapsed?: (event: React.SyntheticEvent<Element>) => void;
 };
@@ -250,6 +251,7 @@ export function EntityUi<T extends Entity>({
   onExpanded,
   onCollapsed,
   className,
+  additionalActions,
 }: // EntityUiPropsG<T>)
 EntityUiBuilderProps<T> & {
   entity: T;
@@ -278,6 +280,7 @@ EntityUiBuilderProps<T> & {
           readonly={readonly}
           className={className}
           open={open}
+          additionalActions={additionalActions}
           onExpanded={onExpanded}
           onCollapsed={onCollapsed}
           onDelete={onDelete}
@@ -323,6 +326,7 @@ export function EntityDisplay({
   open,
   onExpanded,
   onCollapsed,
+  additionalActions,
 }: EntityDisplayProps) {
   const childrenArray = React.Children.toArray(children).flatMap((child) => {
     if (child && (child as any).type === React.Fragment) {
@@ -346,6 +350,7 @@ export function EntityDisplay({
           <>
             {!readonly && (
               <>
+                {additionalActions}
                 <button className="button" onClick={onEdit}>
                   Edit
                 </button>

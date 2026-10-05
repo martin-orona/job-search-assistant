@@ -36,6 +36,7 @@ export function EntitySection<T extends Entity>({
   exportDialog,
   deleteDialog,
   renderRecordChildren,
+  renderRecordActions,
 
   onDelete,
   deletionErrors,
@@ -68,6 +69,7 @@ export function EntitySection<T extends Entity>({
   exportDialog?: React.ReactNode;
   deleteDialog?: (params: { itemId: number; onConfirm: DeleteEntityHandler; onCancel: (itemId: number) => void }) => React.ReactNode;
   renderRecordChildren?: (item: T) => React.ReactNode;
+  renderRecordActions?: (item: T) => React.ReactNode;
 
   onDelete: DeleteEntityHandler;
   deletionErrors: Record<number, string>;
@@ -261,6 +263,7 @@ export function EntitySection<T extends Entity>({
         {...{ [itemPropName]: item as T }}
         className={className}
         inEditMode={inEditMode}
+        additionalActions={renderRecordActions?.(item as T)}
         setInEditMode={setInEditMode}
         editError={editError}
         open={expandedRecords?.[item.id]}

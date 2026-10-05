@@ -1,66 +1,18 @@
 import { useEffect, useState } from "react";
 import type { SavedJobPostingSummary } from "../App";
-import type { AiPrompt } from "./AiPrompt";
+import { AiPromptUi, type AiPrompt } from "./AiPrompt";
+import { AiPromptTemplateUi, type AiPromptTemplate } from "./AiPromptTemplate";
+import type { Entity } from "./Entity";
+import { getPatch } from "../utilities/entities";
+import { useSimpleDialogErrors } from "../utilities/componentState";
+import { EntitySection } from "./EntitySection";
+import { ResumeUi, type Resume } from "./Resume";
 
-type SavedPromptTemplate = {
-  id: number;
-  name: string;
-  documentId?: number;
-  template?: string;
-  document?: {
-    id: number;
-    title: string;
-    type: string;
-    content: string;
-    source: string | null;
-  } | null;
-  createdAt?: string;
-};
+type SavedPromptTemplate = AiPromptTemplate;
 
-type SavedResume = {
-  id: number;
-  name: string;
-  jobTitle: string;
-  date: string;
-  documentId: number;
-  document?: {
-    id: number;
-    title: string;
-    type: string;
-    content: string;
-    source: string | null;
-  } | null;
-};
+type SavedResume = Resume;
 
-type SavedAiPrompt = {
-  id: number;
-  name: string;
-  aiName: string;
-  aiUrl: string;
-  jobPostingId: number;
-  resumeId: number;
-  aiPromptTemplateId: number;
-  promptDocumentId: number;
-  responseDocumentId: number;
-  createdAt: string;
-  updatedAt: string;
-  promptContent: string;
-  responseContent: string;
-  jobPostingContent: string;
-  resumeContent: string;
-  jobPostingTitle: string;
-  jobPostingCompany: string;
-  jobPostingWorkModel: string;
-  jobPostingSalary: string;
-  resumeName: string;
-  resumeJobTitle: string;
-  resumeDate: string;
-  aiPromptTemplateName: string;
-};
-
-function formatWorkModelLabel(workModel: string) {
-  return workModel === "InOffice" ? "In Office" : workModel || "Unknown";
-}
+type SavedAiPrompt = AiPrompt;
 
 const DOCUMENT_TYPE_OPTIONS = ["HTML", "PDF", "Markdown", "Text", "Word", "Other"] as const;
 
@@ -235,7 +187,13 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
   const [expanderState, setExpanderState] = useState<ExpanderState>(getStoredExpanderState);
   const [savedTemplates, setSavedTemplates] = useState<SavedPromptTemplate[]>([]);
   const [savedResumes, setSavedResumes] = useState<SavedResume[]>([]);
+  const [resumesLoading, setResumesLoading] = useState(false);
+  const [resumeDeletionErrors, setResumeDeletionError, clearResumeDeletionError] = useSimpleDialogErrors();
   const [savedAiPrompts, setSavedAiPrompts] = useState<SavedAiPrompt[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [promptsLoading, setPromptsLoading] = useState(false);
+  const [templateDeletionErrors, setTemplateDeletionError, clearTemplateDeletionError] = useSimpleDialogErrors();
+  const [promptDeletionErrors, setPromptDeletionError, clearPromptDeletionError] = useSimpleDialogErrors();
   const [resumeId, setResumeId] = useState(() => getStoredLoadedResume().id);
   const [resumeName, setResumeName] = useState(() => getStoredLoadedResume().name);
   const [resumeJobTitle, setResumeJobTitle] = useState(() => getStoredLoadedResume().jobTitle);
@@ -294,8 +252,9 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
   }
 
   async function refreshSavedAiPrompts() {
+    setPromptsLoading(true);
     try {
-      const response = await fetch("/api/v1/ai-prompts/");
+      const response = await fetch("/api/v1/ai-prompts/?deep=true");
       if (!response.ok) {
         const detail = (await response.text()).trim();
         throw new Error(`${response.status}: ${detail || "No server details provided."}`);
@@ -306,12 +265,15 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to load saved AI prompts.";
       setStatus(`Unable to refresh saved AI prompts. (${message})`);
+    } finally {
+      setPromptsLoading(false);
     }
   }
 
   async function refreshSavedResumes() {
+    setResumesLoading(true);
     try {
-      const response = await fetch("/api/v1/resumes/");
+      const response = await fetch("/api/v1/resumes/?deep=true");
       if (!response.ok) {
         const detail = (await response.text()).trim();
         throw new Error(`${response.status}: ${detail || "No server details provided."}`);
@@ -322,10 +284,13 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to load saved resumes.";
       setStatus(`Unable to refresh saved resumes. (${message})`);
+    } finally {
+      setResumesLoading(false);
     }
   }
 
   async function refreshSavedTemplates() {
+    setTemplatesLoading(true);
     try {
       const response = await fetch("/api/v1/ai-prompt-templates/?deep=true");
       if (!response.ok) {
@@ -338,49 +303,21 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to load saved prompt templates.";
       setStatus(`Unable to refresh saved templates. (${message})`);
+    } finally {
+      setTemplatesLoading(false);
     }
   }
 
   useEffect(() => {
-    void fetch("/api/v1/ai-prompt-templates/?deep=true")
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("Unable to load saved prompt templates.");
-        }
-        return (await response.json()) as SavedPromptTemplate[];
-      })
-      .then(setSavedTemplates)
-      .catch((error: unknown) => {
-        setStatus(error instanceof Error ? error.message : "Unable to load saved prompt templates.");
-      });
+    void refreshSavedTemplates();
   }, []);
 
   useEffect(() => {
-    void fetch("/api/v1/ai-prompts/")
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("Unable to load saved AI prompts.");
-        }
-        return (await response.json()) as SavedAiPrompt[];
-      })
-      .then(setSavedAiPrompts)
-      .catch((error: unknown) => {
-        setStatus(error instanceof Error ? error.message : "Unable to load saved AI prompts.");
-      });
+    void refreshSavedAiPrompts();
   }, []);
 
   useEffect(() => {
-    void fetch("/api/v1/resumes/")
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("Unable to load saved resumes.");
-        }
-        return (await response.json()) as SavedResume[];
-      })
-      .then(setSavedResumes)
-      .catch((error: unknown) => {
-        setStatus(error instanceof Error ? error.message : "Unable to load saved resumes.");
-      });
+    void refreshSavedResumes();
   }, []);
 
   async function handleSaveTemplate() {
@@ -410,7 +347,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
     }
 
     const saved = (await response.json()) as SavedPromptTemplate;
-    const savedContent = saved.document?.content ?? saved.template ?? templateContent;
+    const savedContent = saved.document?.content ?? templateContent;
     setSavedTemplates((current) => [saved, ...current]);
     setTemplateId(String(saved.id));
     setTemplateContent(savedContent);
@@ -420,8 +357,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
   async function handleDeleteTemplate(id: number) {
     const response = await fetch(`/api/v1/ai-prompt-templates/${id}`, { method: "DELETE" });
     if (!response.ok) {
-      setStatus("Unable to delete the prompt template.");
-      return;
+      throw new Error((await response.text()) || "Unable to delete the prompt template.");
     }
     setSavedTemplates((current) => current.filter((template) => template.id !== id));
     setStatus("Prompt template deleted.");
@@ -511,8 +447,7 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
   async function handleDeleteResume(id: number) {
     const response = await fetch(`/api/v1/resumes/${id}`, { method: "DELETE" });
     if (!response.ok) {
-      setStatus("Unable to delete the resume.");
-      return;
+      throw new Error((await response.text()) || "Unable to delete the resume.");
     }
     setSavedResumes((current) => current.filter((saved) => saved.id !== id));
     setStatus("Resume deleted.");
@@ -567,37 +502,29 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
       return;
     }
 
-    const saved = (await response.json()) as AiPrompt;
-
-    setSavedAiPrompts((current) => [
-      {
-        ...saved,
-        promptContent: saved.promptDocument?.content ?? "",
-        responseContent: saved.responseDocument?.content ?? "",
-        jobPostingTitle: jobPosting.title,
-        jobPostingCompany: jobPosting.company,
-        resumeName,
-        aiPromptTemplateName: templateName,
-        jobPostingContent: jobPosting.document?.content ?? "",
-        resumeContent,
-        jobPostingWorkModel: jobPosting.workModel,
-        jobPostingSalary: jobPosting.salary,
-        resumeJobTitle,
-        resumeDate,
-      },
-      ...current,
-    ]);
+    await refreshSavedAiPrompts();
     setStatus("AI prompt saved.");
   }
 
   async function handleDeleteAiPrompt(id: number) {
     const response = await fetch(`/api/v1/ai-prompts/${id}`, { method: "DELETE" });
     if (!response.ok) {
-      setStatus("Unable to delete the saved AI prompt.");
-      return;
+      throw new Error((await response.text()) || "Unable to delete the saved AI prompt.");
     }
     setSavedAiPrompts((current) => current.filter((saved) => saved.id !== id));
     setStatus("Saved AI prompt deleted.");
+  }
+
+  async function saveListingRecord<T extends Entity>(endpoint: string, entity: T, records: T[], reload: () => Promise<void>) {
+    const original = records.find((record) => record.id === entity.id);
+    if (entity.id > 0 && !original) throw new Error("The original record is no longer available.");
+    const response = await fetch(entity.id > 0 ? `${endpoint}${entity.id}` : endpoint, {
+      method: entity.id > 0 ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entity.id > 0 && original ? getPatch(original, entity) : entity),
+    });
+    if (!response.ok) throw new Error((await response.text()) || "Unable to save the record.");
+    await reload();
   }
 
   function handleGeneratePrompt(): string {
@@ -752,121 +679,37 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
             </details>
           </div>
 
-          <details
+          <EntitySection<AiPrompt>
             id="resume-analyzer--ai-prompt--saved-ai-prompts--container"
-            className="resume-analyzer-inner-expander saved-ai-prompts"
+            title="Saved AI Prompts"
+            className="saved-ai-prompts"
+            data={savedAiPrompts}
+            ListItemUi={AiPromptUi}
+            itemPropName="prompt"
+            isLoading={promptsLoading}
+            emptyListMessage="No saved AI prompts yet."
             open={expanderState.savedAiPrompts}
-            onToggle={(event) => setExpanderOpen("savedAiPrompts", event.currentTarget.open)}
-          >
-            <summary>
-              Saved AI Prompts
-              <button
-                id="resume-analyzer--ai-prompt--saved-ai-prompts--refresh-button"
-                type="button"
-                className="button expander-summary-button"
-                aria-label="Refresh saved AI prompts"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void refreshSavedAiPrompts();
-                }}
-              >
-                Refresh
-              </button>
-            </summary>
-            <div className="resume-analyzer-saved-list saved-ai-prompts-list">
-              {savedAiPrompts.length === 0 ? (
-                <p className="resume-analyzer-empty-state">No saved AI prompts yet.</p>
-              ) : (
-                savedAiPrompts.map((savedAiPrompt) => (
-                  <div
-                    key={savedAiPrompt.id}
-                    id={`resume-analyzer--saved-ai-prompt--container--${savedAiPrompt.id}`}
-                    className="resume-analyzer-saved-item saved-ai-prompt-container"
-                  >
-                    <details
-                      id={`resume-analyzer--saved-ai-prompt--details--${savedAiPrompt.id}`}
-                      className="resume-analyzer-saved-resume saved-ai-prompt"
-                      open={expanderState.savedAiPromptCards[savedAiPrompt.id] ?? false}
-                      onToggle={(event) => {
-                        const isOpen = event.currentTarget.open;
-                        setExpanderState((current) => ({
-                          ...current,
-                          savedAiPromptCards: {
-                            ...current.savedAiPromptCards,
-                            [savedAiPrompt.id]: isOpen,
-                          },
-                        }));
-                      }}
-                    >
-                      <summary className="resume-analyzer-saved-summary summary">
-                        <span className="ai-prompt-name">{savedAiPrompt.name}</span>
-                        <span className="ai-prompt-job-posting-title">{savedAiPrompt.jobPostingTitle}</span>
-                        <span className="ai-prompt-resume-name">{savedAiPrompt.resumeName}</span>
-                        <div className="card-actions">
-                          <button
-                            id={`resume-analyzer--saved-ai-prompt--load-button--${savedAiPrompt.id}`}
-                            type="button"
-                            className="button"
-                            onClick={() => {
-                              setAiPromptContent(savedAiPrompt.promptContent);
-                              setAiResponseText(savedAiPrompt.responseContent);
-                              setAiUrl(savedAiPrompt.aiUrl);
-                              setStatus(`Loaded AI prompt: ${savedAiPrompt.name}`);
-                            }}
-                          >
-                            Load
-                          </button>
-                          <button
-                            id={`resume-analyzer--saved-ai-prompt--delete-button--${savedAiPrompt.id}`}
-                            type="button"
-                            className="button button--delete"
-                            onClick={() => {
-                              void handleDeleteAiPrompt(savedAiPrompt.id);
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </summary>
-                      <div className="resume-analyzer-saved-details details">
-                        <div className="ai-url">AI URL: {savedAiPrompt.aiUrl || "Not specified"}</div>
-                        <details className="resume-analyzer-inner-expander">
-                          <summary>
-                            {`Job Posting: ${[
-                              savedAiPrompt.jobPostingCompany,
-                              savedAiPrompt.jobPostingTitle || "Not specified",
-                              formatWorkModelLabel(savedAiPrompt.jobPostingWorkModel),
-                              savedAiPrompt.jobPostingSalary || "Unknown Salary",
-                            ].join(" | ")}`}
-                          </summary>
-                          <div className="resume-analyzer-document-content">{savedAiPrompt.jobPostingContent}</div>
-                        </details>
-                        <details className="resume-analyzer-inner-expander">
-                          <summary>
-                            {`Resume: ${[
-                              savedAiPrompt.resumeName || "Not specified",
-                              savedAiPrompt.resumeJobTitle || "Not specified",
-                              toDateInputValue(savedAiPrompt.resumeDate) || "No date",
-                            ].join(" | ")}`}
-                          </summary>
-                          <div className="resume-analyzer-document-content">{savedAiPrompt.resumeContent}</div>
-                        </details>
-                        <details className="resume-analyzer-inner-expander">
-                          <summary>Prompt document</summary>
-                          <div className="resume-analyzer-document-content">{savedAiPrompt.promptContent}</div>
-                        </details>
-                        <details className="resume-analyzer-inner-expander">
-                          <summary>Response: {extractMatchPercent(savedAiPrompt.responseContent)}</summary>
-                          <div className="resume-analyzer-document-content">{savedAiPrompt.responseContent}</div>
-                        </details>
-                      </div>
-                    </details>
-                  </div>
-                ))
-              )}
-            </div>
-          </details>
+            onExpanded={() => setExpanderOpen("savedAiPrompts", true)}
+            onCollapsed={() => setExpanderOpen("savedAiPrompts", false)}
+            expandedRecords={expanderState.savedAiPromptCards}
+            onRecordExpansionChange={(id, open) => setExpanderState((current) => ({ ...current, savedAiPromptCards: { ...current.savedAiPromptCards, [id]: open } }))}
+            reloadData={refreshSavedAiPrompts}
+            onCreateRecord={() => setSavedAiPrompts((current) => [{ id: 0, name: "", aiName: "", aiUrl: "", jobPostingId: jobPosting?.id ?? 0, resumeId: Number(resumeId), aiPromptTemplateId: Number(templateId), promptDocument: { title: "Prompt", type: "Markdown", content: "" }, responseDocument: { title: "Response", type: "Markdown", content: "" } } as AiPrompt, ...current])}
+            onRemoveRecord={(id) => setSavedAiPrompts((current) => current.filter((prompt) => prompt.id !== id))}
+            onSave={async ({ entity }) => saveListingRecord("/api/v1/ai-prompts/", entity, savedAiPrompts, refreshSavedAiPrompts)}
+            onDelete={async ({ id }) => handleDeleteAiPrompt(id)}
+            deletionErrors={promptDeletionErrors}
+            setDeletionError={setPromptDeletionError}
+            clearDeletionError={clearPromptDeletionError}
+            renderRecordChildren={(prompt) => <div className="value match-percent">Response: {extractMatchPercent(prompt.responseDocument?.content)}</div>}
+            renderRecordActions={(prompt) => <button id={`resume-analyzer--saved-ai-prompt--load-button--${prompt.id}`} type="button" className="button" onClick={(event) => {
+              event.stopPropagation();
+              setAiPromptContent(prompt.promptDocument?.content ?? "");
+              setAiResponseText(prompt.responseDocument?.content ?? "");
+              setAiUrl(prompt.aiUrl);
+              setStatus(`Loaded AI prompt: ${prompt.name}`);
+            }}>Load</button>}
+          />
         </div>
       </details>
 
@@ -1014,90 +857,40 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
             </details>
           </div>
 
-          <details
+          <EntitySection<Resume>
             id="resume-analyzer--saved-resumes--container"
-            className="resume-analyzer-inner-expander"
+            title="Saved Resumes"
+            className="saved-resumes"
+            data={savedResumes}
+            ListItemUi={ResumeUi}
+            itemPropName="resume"
+            isLoading={resumesLoading}
+            emptyListMessage="No saved resumes yet."
             open={expanderState.savedResumes}
-            onToggle={(event) => setExpanderOpen("savedResumes", event.currentTarget.open)}
-          >
-            <summary>
-              Saved Resumes
-              <button
-                id="resume-analyzer--saved-resumes--refresh-button"
-                type="button"
-                className="button expander-summary-button"
-                aria-label="Refresh saved resumes"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void refreshSavedResumes();
-                }}
-              >
-                Refresh
-              </button>
-            </summary>
-            <div className="resume-analyzer-saved-list">
-              {savedResumes.length === 0 ? (
-                <p className="resume-analyzer-empty-state">No saved resumes yet.</p>
-              ) : (
-                savedResumes.map((resume) => (
-                  <div key={resume.id} className="resume-analyzer-saved-item">
-                    <details
-                      className="resume-analyzer-saved-resume"
-                      open={expanderState.savedResumeCards[resume.id] ?? false}
-                      onToggle={(event) => {
-                        const isOpen = event.currentTarget.open;
-                        setExpanderState((current) => ({
-                          ...current,
-                          savedResumeCards: {
-                            ...current.savedResumeCards,
-                            [resume.id]: isOpen,
-                          },
-                        }));
-                      }}
-                    >
-                      <summary className="resume-analyzer-saved-summary">
-                        <span>{[resume.name, resume.jobTitle, toDateInputValue(resume.date) || "No date"].filter(Boolean).join(" ")}</span>
-                        <div className="card-actions">
-                          <button
-                            type="button"
-                            className="button"
-                            onClick={() => {
-                              setResumeId(String(resume.id));
-                              setResumeName(resume.name);
-                              setResumeJobTitle(resume.jobTitle);
-                              setResumeDate(toDateInputValue(resume.date));
-                              setResumeDocumentId(String(resume.documentId));
-                              setResumeDocumentType(resume.document?.type ?? "");
-                              setResumeContent(resume.document?.content ?? "");
-                              setStatus(`Loaded resume: ${resume.name}`);
-                            }}
-                          >
-                            Load
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--delete"
-                            onClick={() => {
-                              void handleDeleteResume(resume.id);
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </summary>
-                      <div className="resume-analyzer-saved-details">
-                        <div>Job title: {resume.jobTitle || "Not specified"}</div>
-                        <div>Date: {toDateInputValue(resume.date) || "Not specified"}</div>
-                        <div>Document ID: {resume.documentId || "Not specified"}</div>
-                        <div className="resume-analyzer-resume-content">{resume.document?.content ?? ""}</div>
-                      </div>
-                    </details>
-                  </div>
-                ))
-              )}
-            </div>
-          </details>
+            onExpanded={() => setExpanderOpen("savedResumes", true)}
+            onCollapsed={() => setExpanderOpen("savedResumes", false)}
+            expandedRecords={expanderState.savedResumeCards}
+            onRecordExpansionChange={(id, open) => setExpanderState((current) => ({ ...current, savedResumeCards: { ...current.savedResumeCards, [id]: open } }))}
+            reloadData={refreshSavedResumes}
+            onCreateRecord={() => setSavedResumes((current) => [{ id: 0, name: "", jobTitle: "", date: "", document: { title: "", type: "Markdown", content: "" } } as Resume, ...current])}
+            onRemoveRecord={(id) => setSavedResumes((current) => current.filter((resume) => resume.id !== id))}
+            onSave={async ({ entity }) => saveListingRecord("/api/v1/resumes/", entity, savedResumes, refreshSavedResumes)}
+            onDelete={async ({ id }) => handleDeleteResume(id)}
+            deletionErrors={resumeDeletionErrors}
+            setDeletionError={setResumeDeletionError}
+            clearDeletionError={clearResumeDeletionError}
+            renderRecordActions={(resume) => <button type="button" className="button" onClick={(event) => {
+              event.stopPropagation();
+              setResumeId(String(resume.id));
+              setResumeName(resume.name);
+              setResumeJobTitle(resume.jobTitle);
+              setResumeDate(toDateInputValue(resume.date));
+              setResumeDocumentId(String(resume.documentId));
+              setResumeDocumentType(resume.document?.type ?? "");
+              setResumeContent(resume.document?.content ?? "");
+              setStatus(`Loaded resume: ${resume.name}`);
+            }}>Load</button>}
+          />
         </div>
       </details>
 
@@ -1161,93 +954,36 @@ export function ResumeAnalyzerTab({ jobPosting }: ResumeAnalyzerTabProps) {
             </details>
           </div>
 
-          <details
+          <EntitySection<AiPromptTemplate>
             id="resume-analyzer--saved-prompt-templates--container"
-            className="resume-analyzer-inner-expander"
+            title="Saved Templates"
+            className="saved-templates"
+            data={savedTemplates}
+            ListItemUi={AiPromptTemplateUi}
+            itemPropName="template"
+            isLoading={templatesLoading}
+            emptyListMessage="No saved prompt templates yet."
             open={expanderState.savedTemplates}
-            onToggle={(event) => setExpanderOpen("savedTemplates", event.currentTarget.open)}
-          >
-            <summary>
-              Saved Templates
-              <button
-                id="resume-analyzer--saved-prompt-templates--refresh-button"
-                type="button"
-                className="button expander-summary-button"
-                aria-label="Refresh saved templates"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void refreshSavedTemplates();
-                }}
-              >
-                Refresh
-              </button>
-            </summary>
-            {savedTemplates.length === 0 ? (
-              <p className="resume-analyzer-empty-state">No saved prompt templates yet.</p>
-            ) : (
-              <div className="resume-analyzer-saved-list">
-                {savedTemplates.map((savedTemplate) => {
-                  const isOpen = expanderState.savedTemplateCards[savedTemplate.id] ?? false;
-                  const templateBody = savedTemplate.document?.content ?? savedTemplate.template ?? "";
-                  return (
-                    <div key={savedTemplate.id} className="resume-analyzer-saved-item">
-                      <div
-                        className="resume-analyzer-saved-summary"
-                        role="button"
-                        tabIndex={0}
-                        aria-expanded={isOpen}
-                        onClick={() =>
-                          setExpanderState((current) => ({
-                            ...current,
-                            savedTemplateCards: { ...current.savedTemplateCards, [savedTemplate.id]: !isOpen },
-                          }))
-                        }
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            setExpanderState((current) => ({
-                              ...current,
-                              savedTemplateCards: { ...current.savedTemplateCards, [savedTemplate.id]: !isOpen },
-                            }));
-                          }
-                        }}
-                      >
-                        <span>{savedTemplate.name}</span>
-                        <div className="card-actions">
-                          <button
-                            type="button"
-                            className="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              const nextContent = savedTemplate.document?.content ?? savedTemplate.template ?? "";
-                              setTemplateId(String(savedTemplate.id));
-                              setTemplateName(savedTemplate.name);
-                              setTemplateContent(nextContent);
-                              setStatus(`Loaded template: ${savedTemplate.name}`);
-                            }}
-                          >
-                            Load
-                          </button>
-                          <button
-                            type="button"
-                            className="button button--delete"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleDeleteTemplate(savedTemplate.id);
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                      {isOpen && <div className="resume-analyzer-saved-details">{templateBody}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </details>
+            onExpanded={() => setExpanderOpen("savedTemplates", true)}
+            onCollapsed={() => setExpanderOpen("savedTemplates", false)}
+            expandedRecords={expanderState.savedTemplateCards}
+            onRecordExpansionChange={(id, open) => setExpanderState((current) => ({ ...current, savedTemplateCards: { ...current.savedTemplateCards, [id]: open } }))}
+            reloadData={refreshSavedTemplates}
+            onCreateRecord={() => setSavedTemplates((current) => [{ id: 0, name: "", document: { title: "", type: "Markdown", content: "" } } as AiPromptTemplate, ...current])}
+            onRemoveRecord={(id) => setSavedTemplates((current) => current.filter((template) => template.id !== id))}
+            onSave={async ({ entity }) => saveListingRecord("/api/v1/ai-prompt-templates/", entity, savedTemplates, refreshSavedTemplates)}
+            onDelete={async ({ id }) => handleDeleteTemplate(id)}
+            deletionErrors={templateDeletionErrors}
+            setDeletionError={setTemplateDeletionError}
+            clearDeletionError={clearTemplateDeletionError}
+            renderRecordActions={(template) => <button type="button" className="button" onClick={(event) => {
+              event.stopPropagation();
+              setTemplateId(String(template.id));
+              setTemplateName(template.name);
+              setTemplateContent(template.document?.content ?? "");
+              setStatus(`Loaded template: ${template.name}`);
+            }}>Load</button>}
+          />
         </div>
       </details>
     </section>

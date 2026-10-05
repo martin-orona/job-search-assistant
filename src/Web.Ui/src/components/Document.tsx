@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { renderEntityUi, useEntityEditor } from "../utilities/componentRendering";
 import {
   EntityDisplay,
@@ -44,11 +45,13 @@ export function ReadOnlyDocument({ document, label, open }: { document: Document
 }
 
 export function DocumentEmbeddedEditor({ document, onChange }: { document: Document; onChange: (value: Document) => void }) {
+  const instanceId = useId();
+  const documentId = document?.id || instanceId;
   return (
     <>
       <div className="document--editor embedded entity-editor">
         <EnumFieldEditor
-          id={`document--editor--type--${document?.id ?? 0}`}
+          id={`document--editor--type--${documentId}`}
           className="document--field type"
           label="Type"
           options={DOCUMENT_TYPES}
@@ -58,7 +61,7 @@ export function DocumentEmbeddedEditor({ document, onChange }: { document: Docum
           }}
         />
         <TextareaFieldEditor
-          id={`document--editor--answer--${document?.id}`}
+          id={`document--editor--answer--${documentId}`}
           className="document--field content"
           label="Content"
           value={document?.content ?? ""}

@@ -306,6 +306,26 @@ or availability of the live Indeed posting.
 
 ## Feature: Resume Analyzer
 
+### Scenario Outline: Saved entities use standardized listings
+
+    Given a saved <Entity> and the user is on the Resume Analyzer tab
+    When the user opens its analyzer section
+    Then the saved listing uses the shared entity-list expander and record count
+    And each record uses the shared display, inline editor, and delete confirmation
+    And Load remains available in the record header to populate the analyzer fields
+    And edits can be cancelled without changing the saved record
+    And Save persists only changed fields using PATCH
+    And saved edits, record expansion, and loaded analyzer fields survive a page reload
+    And pending deletion uses being-deleted styling and can be cancelled or confirmed
+    And failed deletion displays the server reason without removing the record
+    And Create saves a new record inline and refreshes the listing
+
+    Examples:
+    | Entity |
+    | Resume |
+    | AI Prompt Template |
+    | AI Prompt |
+
 <details>
     <summary>expand to see details</summary>
 
@@ -675,6 +695,7 @@ The records are taking up a lot of visual space. When there are many records, it
     When the user presses the Delete button
 
     Then the user is asked to confirm that they really want to delete the record
+    And the record has the being-deleted CSS class while the confirmation is open, matching the other tabs
     And if the <Entity> has any foreign key references to other entities, the user is given a list of referenced objects to include in the deletion
 
     When the user presses the Delete button on the confirmation screen
@@ -698,6 +719,7 @@ The records are taking up a lot of visual space. When there are many records, it
 
     Then the confirmation screen is removed
     And the record is left intact
+    And the being-deleted CSS class is removed from the record
 
     Examples:
     | Entity |
